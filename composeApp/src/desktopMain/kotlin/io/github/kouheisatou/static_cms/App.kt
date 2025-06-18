@@ -1,42 +1,53 @@
 package io.github.kouheisatou.static_cms
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import org.jetbrains.compose.resources.painterResource
-import org.jetbrains.compose.ui.tooling.preview.Preview
-
-import staticcms.composeapp.generated.resources.Res
-import staticcms.composeapp.generated.resources.compose_multiplatform
+import io.github.kouheisatou.static_cms.screens.*
+import io.github.kouheisatou.static_cms.ui.theme.RetroTheme
+import io.github.kouheisatou.static_cms.viewmodel.StaticCMSViewModel
+import io.github.kouheisatou.static_cms.model.AppScreen
 
 @Composable
-@Preview
 fun App() {
-    MaterialTheme {
-        var showContent by remember { mutableStateOf(false) }
-        Column(
-            modifier = Modifier
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Button(onClick = { showContent = !showContent }) {
-                Text("Click me!")
+    val viewModel = remember { StaticCMSViewModel() }
+    val state by viewModel.state.collectAsState()
+    
+    RetroTheme {
+        when (state.currentScreen) {
+            AppScreen.REPOSITORY_INPUT -> {
+                RepositoryInputScreen(
+                    repositoryUrl = state.repositoryUrl,
+                    onRepositoryUrlChange = viewModel::updateRepositoryUrl,
+                    onCloneClick = viewModel::startClone,
+                    onSelectLocalDirectory = viewModel::selectLocalDirectory
+                )
             }
-            AnimatedVisibility(showContent) {
-                val greeting = remember { Greeting().greet() }
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Image(painterResource(Res.drawable.compose_multiplatform), null)
-                    Text("Compose: $greeting")
+            
+            AppScreen.CLONE_PROGRESS -> {
+                CloneProgressScreen(
+                    repositoryUrl = state.repositoryUrl,
+                    progress = state.cloneProgress
+                )
+            }
+            
+            AppScreen.MAIN_VIEW -> {
+                MainScreen(
+                    contentDirectories = state.contentDirectories,
+                    selectedDirectoryIndex = state.selectedDirectoryIndex,
+                    onDirectorySelected = viewModel::selectDirectory,
+                    onCellClick = viewModel::openArticle
+                )
+            }
+            
+            AppScreen.ARTICLE_DETAIL -> {
+                state.selectedArticle?.let { article ->
+                    ArticleDetailScreen(
+                        article = article,
+                        onContentChange = { content ->
+                            viewModel.updateArticleContent(content)
+                        },
+                        onSave = viewModel::saveArticle,
+                        onBack = viewModel::backToMain
+                    )
                 }
             }
         }
