@@ -5,19 +5,7 @@ import com.github.doyaaaaaken.kotlincsv.dsl.csvWriter
 import io.github.kouheisatou.static_cms.model.*
 import kotlinx.coroutines.*
 import java.io.File
-import javax.swing.JFileChooser
-
 object FileOperations {
-
-    fun selectDirectory(): File? {
-        val fileChooser = JFileChooser().apply {
-            fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-            dialogTitle = "Select Contents Directory"
-        }
-        return if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-            fileChooser.selectedFile
-        } else null
-    }
 
     fun scanContentDirectories(rootDir: File): List<ContentDirectory> {
         val contentDir = File(rootDir, "contents")
@@ -159,16 +147,95 @@ object FileOperations {
 
     suspend fun simulateClone(repositoryUrl: String, onProgress: (Float) -> Unit): File? {
         return withContext(Dispatchers.IO) {
-            // Git clone をシミュレート
-            for (i in 0..100) {
-                delay(50)
-                onProgress(i / 100f)
+            try {
+                // クローン処理のシミュレーション（実際のGit操作に置き換え可能）
+                val phases = listOf(
+                    "Connecting to remote repository..." to 0.1f,
+                    "Receiving objects..." to 0.6f,
+                    "Resolving deltas..." to 0.9f,
+                    "Checking out files..." to 1.0f
+                )
+                
+                for ((phase, targetProgress) in phases) {
+                    val startProgress = onProgress.let { 
+                        // 現在の進捗を取得するため、状態を保持
+                        var currentProgress = if (targetProgress == 0.1f) 0f else phases[phases.indexOf(phase to targetProgress) - 1].second
+                        currentProgress
+                    }
+                    
+                    // 段階的に進捗を更新
+                    val steps = 20
+                    for (i in 0..steps) {
+                        val progress = startProgress + (targetProgress - startProgress) * (i.toFloat() / steps)
+                        onProgress(progress)
+                        delay(100) // より現実的な速度
+                    }
+                }
+                
+                // 現在はシミュレーションのみ - 実際のクローン保存場所の説明
+                println("=== クローン保存場所の説明 ===")
+                println("現在: シミュレーションのみ（実際のクローンなし）")
+                println("使用中のディレクトリ: ${File("doc").absolutePath}")
+                println("実装予定のクローン先: ${getCloneDirectory().absolutePath}")
+                
+                // 今回はdoc/sample_contentsディレクトリを返す
+                val sampleDir = File("doc/sample_contents")
+                if (sampleDir.exists()) {
+                    sampleDir.parentFile // docディレクトリを返す
+                } else {
+                    // フォールバック
+                    val currentDir = File(".")
+                    currentDir
+                }
+            } catch (e: Exception) {
+                println("Clone error: ${e.message}")
+                null
             }
-            
-            // 実際の実装では、ここでgit cloneを実行
-            // 今回はsample_contentsディレクトリを返す
-            val sampleDir = File("sample_contents")
-            if (sampleDir.exists()) sampleDir else null
+        }
+    }
+    
+    // 実際のクローン機能を実装する場合の推奨保存場所
+    private fun getCloneDirectory(): File {
+        val userHome = System.getProperty("user.home")
+        val appDataDir = File(userHome, ".staticcms")
+        if (!appDataDir.exists()) {
+            appDataDir.mkdirs()
+        }
+        return File(appDataDir, "repositories")
+    }
+    
+    // 実際のGitクローン実装例（将来の実装用）
+    suspend fun actualGitClone(repositoryUrl: String, onProgress: (Float) -> Unit): File? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val cloneDir = getCloneDirectory()
+                val repoName = repositoryUrl.substringAfterLast("/").removeSuffix(".git")
+                val targetDir = File(cloneDir, repoName)
+                
+                // 既存のディレクトリがある場合は削除
+                if (targetDir.exists()) {
+                    targetDir.deleteRecursively()
+                }
+                
+                // 実際のgitコマンド実行
+                val processBuilder = ProcessBuilder("git", "clone", repositoryUrl, targetDir.absolutePath)
+                processBuilder.directory(cloneDir)
+                
+                val process = processBuilder.start()
+                
+                // プロセス監視とプログレス更新
+                // 実際の実装では、git clone の標準出力を解析して進捗を計算
+                
+                val exitCode = process.waitFor()
+                if (exitCode == 0) {
+                    targetDir
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                println("Actual clone error: ${e.message}")
+                null
+            }
         }
     }
 } 

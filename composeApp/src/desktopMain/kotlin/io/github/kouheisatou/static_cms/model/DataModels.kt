@@ -35,7 +35,8 @@ data class ArticleContent(
 )
 
 data class AppState(
-    val currentScreen: AppScreen = AppScreen.REPOSITORY_INPUT,
+    val currentScreen: AppScreen = AppScreen.GITHUB_AUTH,
+    val githubToken: String = "",
     val repositoryUrl: String = "",
     val cloneProgress: Float = 0f,
     val isCloning: Boolean = false,
@@ -46,6 +47,7 @@ data class AppState(
 )
 
 enum class AppScreen {
+    GITHUB_AUTH,        // 画面0: GitHub認証
     REPOSITORY_INPUT,   // 画面1: リポジトリURL入力
     CLONE_PROGRESS,     // 画面2: Clone進行中
     MAIN_VIEW,          // 画面3: メイン画面

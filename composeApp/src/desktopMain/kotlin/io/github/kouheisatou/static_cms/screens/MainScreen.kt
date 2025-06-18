@@ -22,6 +22,7 @@ fun MainScreen(
     selectedDirectoryIndex: Int,
     onDirectorySelected: (Int) -> Unit,
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit,
+    onCommitAndPush: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     RetroWindow(
@@ -42,11 +43,35 @@ fun MainScreen(
             }
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Tab row
+                // Top toolbar with commit/push button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(RetroColors.ButtonFace)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Content Manager",
+                        style = RetroTypography.Default.copy(fontSize = 12.sp),
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                    
+                    RetroTextButton(
+                        text = "📤 Commit & Push",
+                        onClick = onCommitAndPush,
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(28.dp)
+                    )
+                }
+                
+                // Tab row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(RetroColors.WindowBackground)
                         .padding(4.dp)
                         .horizontalScroll(rememberScrollState())
                 ) {

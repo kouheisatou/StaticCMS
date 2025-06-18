@@ -790,8 +790,143 @@ fun MainScreen(viewModel: StaticCMSViewModel) {
 }
 ```
 
+## 10. GitHub統合API
+
+### 10.1 GitHubApiClient
+
+#### 基本情報
+- **パッケージ**: `io.github.kouheisatou.static_cms.util`
+- **責務**: GitHub API認証とリポジトリ操作
+- **依存関係**: Ktor HTTP Client
+
+#### 公開API
+
+##### 認証API
+
+###### initialize
+```kotlin
+fun initialize(token: String)
+```
+- **用途**: Personal Access Tokenによる初期化
+- **パラメータ**: 
+  - `token: String` - GitHub Personal Access Token
+- **戻り値**: `Unit`
+- **副作用**: HTTPクライアントを認証情報で初期化
+
+###### authenticate
+```kotlin
+suspend fun authenticate(): Result<GitHubUser>
+```
+- **用途**: GitHub認証の実行
+- **パラメータ**: なし
+- **戻り値**: `Result<GitHubUser>`
+- **副作用**: 認証状態を更新
+
+##### リポジトリAPI
+
+###### getRepository
+```kotlin
+suspend fun getRepository(owner: String, repo: String): Result<GitHubRepo>
+```
+- **用途**: リポジトリ情報の取得
+- **パラメータ**: 
+  - `owner: String` - リポジトリオーナー
+  - `repo: String` - リポジトリ名
+- **戻り値**: `Result<GitHubRepo>`
+
+###### hasWritePermission
+```kotlin
+suspend fun hasWritePermission(owner: String, repo: String): Result<Boolean>
+```
+- **用途**: 書き込み権限の確認
+- **パラメータ**: 
+  - `owner: String` - リポジトリオーナー
+  - `repo: String` - リポジトリ名
+- **戻り値**: `Result<Boolean>`
+
+### 10.2 GitOperations
+
+#### 基本情報
+- **パッケージ**: `io.github.kouheisatou.static_cms.util`
+- **責務**: Gitリポジトリ操作
+- **依存関係**: JGit Library
+
+#### 公開API
+
+##### Git操作API
+
+###### cloneRepository
+```kotlin
+suspend fun cloneRepository(
+    repositoryUrl: String,
+    destinationPath: String,
+    username: String,
+    token: String
+): Result<Git>
+```
+- **用途**: リポジトリのクローン
+- **パラメータ**: 
+  - `repositoryUrl: String` - クローン対象URL
+  - `destinationPath: String` - ローカル保存先
+  - `username: String` - GitHubユーザー名
+  - `token: String` - 認証トークン
+- **戻り値**: `Result<Git>`
+- **副作用**: プログレス状態を更新
+
+###### commitAndPush
+```kotlin
+suspend fun commitAndPush(
+    git: Git,
+    commitMessage: String,
+    username: String,
+    email: String,
+    token: String
+): Result<Unit>
+```
+- **用途**: コミットとプッシュの実行
+- **パラメータ**: 
+  - `git: Git` - Gitリポジトリインスタンス
+  - `commitMessage: String` - コミットメッセージ
+  - `username: String` - コミッター名
+  - `email: String` - コミッターメール
+  - `token: String` - 認証トークン
+- **戻り値**: `Result<Unit>`
+- **副作用**: プログレス状態を更新
+
+### 10.3 統合ViewModelAPI拡張
+
+#### GitHub認証関連API
+
+###### authenticateWithGitHub
+```kotlin
+fun authenticateWithGitHub(token: String)
+```
+- **用途**: GitHub認証の実行
+- **パラメータ**: 
+  - `token: String` - Personal Access Token
+- **戻り値**: `Unit`
+- **副作用**: 認証状態を更新
+
+###### commitAndPush
+```kotlin
+fun commitAndPush(commitMessage: String = "Update content via StaticCMS")
+```
+- **用途**: 変更のコミット・プッシュ
+- **パラメータ**: 
+  - `commitMessage: String` - コミットメッセージ（デフォルト値あり）
+- **戻り値**: `Unit`
+- **副作用**: Git操作の実行とプログレス更新
+
 ## 関連ファイル
 - ViewModel: [StaticCMSViewModel.kt](../../composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/viewmodel/StaticCMSViewModel.kt)
 - FileOperations: [FileOperations.kt](../../composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/util/FileOperations.kt)
+- GitHubApiClient: [GitHubApiClient.kt](../../composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/util/GitHubApiClient.kt)
+- GitOperations: [GitOperations.kt](../../composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/util/GitOperations.kt)
 - データモデル: [DataModels.kt](../../composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/model/DataModels.kt)
-- 画面実装: [screens/](../../composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/screens/) 
+- 画面実装: [screens/](../../composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/screens/)
+
+## 関連文書
+- [アーキテクチャ設計書_StaticCMS_v1.0.md](../architecture/アーキテクチャ設計書_StaticCMS_v1.0.md)
+- [設計詳細仕様書_CSV・Markdown管理機能_v1.0.md](../design/設計詳細仕様書_CSV・Markdown管理機能_v1.0.md)
+- [設計詳細仕様書_GitHub統合機能_v1.0.md](../design/設計詳細仕様書_GitHub統合機能_v1.0.md)
+- [UI設計書_Windows95レトロUI_v1.0.md](../ui/UI設計書_Windows95レトロUI_v1.0.md) 

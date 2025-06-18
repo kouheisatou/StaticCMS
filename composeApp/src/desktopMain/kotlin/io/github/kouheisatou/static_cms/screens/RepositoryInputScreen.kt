@@ -16,8 +16,7 @@ import io.github.kouheisatou.static_cms.util.FileOperations
 fun RepositoryInputScreen(
     repositoryUrl: String,
     onRepositoryUrlChange: (String) -> Unit,
-    onCloneClick: () -> Unit,
-    onSelectLocalDirectory: () -> Unit
+    onCloneClick: () -> Unit
 ) {
     RetroWindow(
         title = "StaticCMS - Repository Selection",
@@ -59,43 +58,44 @@ fun RepositoryInputScreen(
                         .padding(bottom = 16.dp)
                 )
                 
+                // デバッグ情報追加
+                val isEnabled = repositoryUrl.isNotBlank()
+                println("DEBUG: RepositoryInputScreen - repositoryUrl='$repositoryUrl', isEnabled=$isEnabled")
+                
+                // テスト用ボタン
                 RetroTextButton(
-                    text = "Clone Repository",
-                    onClick = onCloneClick,
-                    enabled = repositoryUrl.isNotBlank(),
+                    text = "Use Test URL",
+                    onClick = {
+                        println("DEBUG: Test URL button clicked")
+                        onRepositoryUrlChange("https://github.com/octocat/Hello-World.git")
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(40.dp)
-                        .padding(bottom = 32.dp)
-                )
-            }
-            
-            // Divider line
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.6f)
-                    .height(2.dp)
-                    .background(io.github.kouheisatou.static_cms.ui.theme.RetroColors.ButtonShadow)
-                    .padding(vertical = 16.dp)
-            )
-            
-            // Local directory section
-            Column(
-                modifier = Modifier.fillMaxWidth(0.6f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Or select a local directory:",
-                    style = RetroTypography.Default,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                        .height(30.dp)
+                        .padding(bottom = 8.dp)
                 )
                 
                 RetroTextButton(
-                    text = "Browse Local Directory",
-                    onClick = onSelectLocalDirectory,
+                    text = "Clone Repository",
+                    onClick = {
+                        println("DEBUG: RepositoryInputScreen - Clone Repository button clicked!")
+                        println("DEBUG: About to call onCloneClick()")
+                        onCloneClick()
+                        println("DEBUG: onCloneClick() returned")
+                    },
+                    enabled = isEnabled,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(40.dp)
+                        .padding(bottom = 16.dp)
+                )
+                
+                // デバッグ用の状態表示
+                Text(
+                    text = "Button enabled: $isEnabled | URL length: ${repositoryUrl.length}",
+                    style = RetroTypography.Default.copy(fontSize = 8.sp),
+                    color = io.github.kouheisatou.static_cms.ui.theme.RetroColors.DisabledText,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
             
@@ -103,7 +103,7 @@ fun RepositoryInputScreen(
             
             // Instructions
             Text(
-                text = "Select a repository containing a 'contents' or 'sample_contents' directory",
+                text = "Enter a repository URL containing a 'contents' or 'sample_contents' directory",
                 style = RetroTypography.Default.copy(
                     color = io.github.kouheisatou.static_cms.ui.theme.RetroColors.DisabledText,
                     fontSize = 10.sp

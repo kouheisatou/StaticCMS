@@ -33,6 +33,14 @@ kotlin {
             implementation(libs.kotlinx.coroutinesSwing)
             implementation("org.commonmark:commonmark:0.21.0")
             implementation("com.github.doyaaaaaken:kotlin-csv-jvm:1.9.1")
+            // HTTP クライアント
+            implementation("io.ktor:ktor-client-core:2.3.7")
+            implementation("io.ktor:ktor-client-cio:2.3.7")
+            implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
+            implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
+            implementation("io.ktor:ktor-client-auth:2.3.7")
+            // Git操作
+            implementation("org.eclipse.jgit:org.eclipse.jgit:6.8.0.202311291450-r")
         }
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
@@ -13,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,18 +69,41 @@ fun RetroButton(
 ) {
     var pressed by remember { mutableStateOf(false) }
     
+    println("DEBUG: RetroButton recomposed - enabled=$enabled, pressed=$pressed")
+    
     Retro3DBorder(
         modifier = modifier
-            .clickable(enabled = enabled) {
+            .pointerInput(enabled) {
                 if (enabled) {
-                    pressed = true
-                    onClick()
-                    pressed = false
+                    detectTapGestures(
+                        onPress = {
+                            println("DEBUG: RetroButton onPress start - enabled=$enabled")
+                            pressed = true
+                            val released = tryAwaitRelease()
+                            pressed = false
+                            if (released) {
+                                println("DEBUG: RetroButton released, calling onClick")
+                                onClick()
+                            } else {
+                                println("DEBUG: RetroButton press cancelled")
+                            }
+                        }
+                    )
+                } else {
+                    println("DEBUG: RetroButton disabled, ignoring input")
                 }
             },
-        pressed = pressed
+        pressed = pressed && enabled
     ) {
-        content()
+        Box(
+            modifier = Modifier
+                .then(if (pressed && enabled) Modifier.offset(1.dp, 1.dp) else Modifier)
+                .fillMaxSize()
+                .then(if (!enabled) Modifier.alpha(0.5f) else Modifier),
+            contentAlignment = Alignment.Center
+        ) {
+            content()
+        }
     }
 }
 
@@ -90,7 +115,10 @@ fun RetroTextButton(
     enabled: Boolean = true
 ) {
     RetroButton(
-        onClick = onClick,
+        onClick = {
+            println("DEBUG: RetroTextButton '$text' clicked, enabled=$enabled")
+            onClick()
+        },
         modifier = modifier,
         enabled = enabled
     ) {
