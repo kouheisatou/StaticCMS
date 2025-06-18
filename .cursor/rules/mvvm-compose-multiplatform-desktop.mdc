@@ -1,0 +1,448 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# MVVM アーキテクチャ - Compose Multiplatform デスクトップアプリ ベストプラクティス
+
+このルールは、MVVMアーキテクチャパターンを使用したCompose Multiplatformデスクトップアプリケーション開発のベストプラクティスを定義しています。
+
+## プロジェクト構造
+
+メインエントリーポイント: [main.kt](mdc:composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/main.kt)
+アプリケーションコンポーネント: [App.kt](mdc:composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/App.kt)
+ビルド設定: [composeApp/build.gradle.kts](mdc:composeApp/build.gradle.kts)
+
+## MVVM アーキテクチャの構成
+
+### 推奨ディレクトリ構造
+```
+src/
+  commonMain/kotlin/
+    ui/
+      screens/          # 画面ごとのComposable
+      components/       # 再利用可能なUIコンポーネント
+      viewmodels/       # ViewModelクラス
+      theme/           # テーマとスタイル
+    domain/
+      models/          # ドメインモデル
+      usecases/        # ビジネスロジック
+      repositories/    # リポジトリインターフェース
+    data/
+      repositories/    # リポジトリ実装
+      datasources/     # データソース（API、DB等）
+      models/          # データ転送オブジェクト
+    di/               # 依存性注入設定
+```
+
+## Model層の実装
+
+### 1. ドメインモデル
+```kotlin
+// domain/models/
+data class User(
+    val id: String,
+    val name: String,
+    val email: String
+)
+
+data class AppState(
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val users: List<User> = emptyList()
+)
+```
+
+### 2. リポジトリパターン
+```kotlin
+// domain/repositories/
+interface UserRepository {
+    suspend fun getUsers(): Result<List<User>>
+    suspend fun createUser(user: User): Result<User>
+}
+
+// data/repositories/
+class UserRepositoryImpl(
+    private val apiDataSource: UserApiDataSource
+) : UserRepository {
+    override suspend fun getUsers(): Result<List<User>> {
+        return try {
+            val users = apiDataSource.fetchUsers()
+            Result.success(users.map { it.toDomainModel() })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}
+```
+
+## ViewModel層の実装
+
+### 1. ベースViewModel
+```kotlin
+// ui/viewmodels/
+abstract class BaseViewModel : ViewModel() {
+    protected val _isLoading = mutableStateOf(false)
+    val isLoading: State<Boolean> = _isLoading
+
+    protected val _error = mutableStateOf<String?>(null)
+    val error: State<String?> = _error
+
+    protected fun handleError(throwable: Throwable) {
+        _error.value = throwable.message ?: "Unknown error occurred"
+        _isLoading.value = false
+    }
+}
+```
+
+### 2. 具体的なViewModel実装
+```kotlin
+class UserListViewModel(
+    private val getUsersUseCase: GetUsersUseCase
+) : BaseViewModel() {
+    
+    private val _users = mutableStateOf<List<User>>(emptyList())
+    val users: State<List<User>> = _users
+
+    private val _selectedUser = mutableStateOf<User?>(null)
+    val selectedUser: State<User?> = _selectedUser
+
+    init {
+        loadUsers()
+    }
+
+    fun loadUsers() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            
+            getUsersUseCase()
+                .onSuccess { userList ->
+                    _users.value = userList
+                    _isLoading.value = false
+                }
+                .onFailure { throwable ->
+                    handleError(throwable)
+                }
+        }
+    }
+
+    fun selectUser(user: User) {
+        _selectedUser.value = user
+    }
+
+    fun clearSelection() {
+        _selectedUser.value = null
+    }
+}
+```
+
+## View層（Compose UI）の実装
+
+### 1. 画面レベルのComposable
+```kotlin
+// ui/screens/
+@Composable
+fun UserListScreen(
+    viewModel: UserListViewModel = koinViewModel(),
+    modifier: Modifier = Modifier
+) {
+    val users by viewModel.users.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val selectedUser by viewModel.selectedUser.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadUsers()
+    }
+
+    UserListContent(
+        users = users,
+        isLoading = isLoading,
+        error = error,
+        selectedUser = selectedUser,
+        onUserSelected = viewModel::selectUser,
+        onRefresh = viewModel::loadUsers,
+        modifier = modifier
+    )
+}
+```
+
+### 2. UIコンポーネントの分離
+```kotlin
+// ui/components/
+@Composable
+private fun UserListContent(
+    users: List<User>,
+    isLoading: Boolean,
+    error: String?,
+    selectedUser: User?,
+    onUserSelected: (User) -> Unit,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxSize()) {
+        if (error != null) {
+            ErrorMessage(
+                message = error,
+                onRetry = onRefresh
+            )
+        }
+        
+        if (isLoading) {
+            LoadingIndicator()
+        } else {
+            LazyColumn {
+                items(users) { user ->
+                    UserListItem(
+                        user = user,
+                        isSelected = user == selectedUser,
+                        onClick = { onUserSelected(user) }
+                    )
+                }
+            }
+        }
+    }
+}
+```
+
+## 状態管理のベストプラクティス
+
+### 1. 単方向データフロー
+- ViewModelから UI への状態の流れを一方向に保つ
+- UI イベントは ViewModel のメソッド呼び出しを通じて処理
+- 状態の変更は ViewModel でのみ行う
+
+### 2. State Hoisting
+```kotlin
+@Composable
+fun SearchableUserList(
+    viewModel: UserListViewModel
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    
+    Column {
+        SearchBar(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            onSearch = { viewModel.searchUsers(searchQuery) }
+        )
+        
+        UserList(
+            users = viewModel.filteredUsers.collectAsState().value
+        )
+    }
+}
+```
+
+## デスクトップアプリ特有の考慮事項
+
+### 1. ウィンドウ管理
+```kotlin
+// main.kt での実装例
+fun main() = application {
+    var isVisible by remember { mutableStateOf(true) }
+    
+    Window(
+        onCloseRequest = ::exitApplication,
+        visible = isVisible,
+        title = "Static CMS",
+        state = WindowState(
+            width = 1200.dp,
+            height = 800.dp,
+            position = WindowPosition(Alignment.Center)
+        )
+    ) {
+        App()
+    }
+}
+```
+
+### 2. メニューバーとキーボードショートカット
+```kotlin
+@Composable
+fun DesktopMenuBar(
+    onNewFile: () -> Unit,
+    onOpenFile: () -> Unit,
+    onSave: () -> Unit
+) {
+    MenuBar {
+        Menu("File", mnemonic = 'F') {
+            Item(
+                "New",
+                onClick = onNewFile,
+                shortcut = KeyShortcut(Key.N, ctrl = true)
+            )
+            Item(
+                "Open",
+                onClick = onOpenFile,
+                shortcut = KeyShortcut(Key.O, ctrl = true)
+            )
+            Item(
+                "Save",
+                onClick = onSave,
+                shortcut = KeyShortcut(Key.S, ctrl = true)
+            )
+        }
+    }
+}
+```
+
+### 3. ファイルダイアログとシステム統合
+```kotlin
+@Composable
+fun FileOperationsViewModel() {
+    fun openFileDialog(): String? {
+        return JFileChooser().run {
+            if (showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                selectedFile.absolutePath
+            } else null
+        }
+    }
+}
+```
+
+## 依存性注入（Koin使用例）
+
+### 1. DIモジュール定義
+```kotlin
+// di/AppModule.kt
+val dataModule = module {
+    single<UserRepository> { UserRepositoryImpl(get()) }
+    single { UserApiDataSource() }
+}
+
+val domainModule = module {
+    factory { GetUsersUseCase(get()) }
+    factory { CreateUserUseCase(get()) }
+}
+
+val viewModelModule = module {
+    viewModel { UserListViewModel(get()) }
+    viewModel { UserDetailViewModel(get(), get()) }
+}
+```
+
+### 2. アプリケーション初期化
+```kotlin
+// main.kt
+fun main() = application {
+    startKoin {
+        modules(dataModule, domainModule, viewModelModule)
+    }
+    
+    Window(onCloseRequest = ::exitApplication) {
+        App()
+    }
+}
+```
+
+## エラーハンドリング戦略
+
+### 1. グローバルエラーハンドリング
+```kotlin
+class GlobalErrorHandler {
+    companion object {
+        fun handleError(error: Throwable): String {
+            return when (error) {
+                is NetworkException -> "ネットワークエラーが発生しました"
+                is ValidationException -> error.message ?: "入力エラー"
+                else -> "予期しないエラーが発生しました"
+            }
+        }
+    }
+}
+```
+
+## テスト戦略
+
+### 1. ViewModelのテスト
+```kotlin
+class UserListViewModelTest {
+    @Test
+    fun `loadUsers should update users state on success`() = runTest {
+        // Given
+        val mockUsers = listOf(
+            User("1", "John", "john@example.com")
+        )
+        val mockUseCase = mockk<GetUsersUseCase> {
+            coEvery { invoke() } returns Result.success(mockUsers)
+        }
+        val viewModel = UserListViewModel(mockUseCase)
+        
+        // When
+        viewModel.loadUsers()
+        
+        // Then
+        assertEquals(mockUsers, viewModel.users.value)
+        assertEquals(false, viewModel.isLoading.value)
+    }
+}
+```
+
+### 2. Composableのテスト
+```kotlin
+@Test
+fun userListScreen_displaysUsers() {
+    composeTestRule.setContent {
+        UserListContent(
+            users = listOf(User("1", "John", "john@example.com")),
+            isLoading = false,
+            error = null,
+            selectedUser = null,
+            onUserSelected = {},
+            onRefresh = {}
+        )
+    }
+    
+    composeTestRule
+        .onNodeWithText("John")
+        .assertIsDisplayed()
+}
+```
+
+## パフォーマンス最適化
+
+### 1. 大量データの処理
+```kotlin
+@Composable
+fun LargeDataList(
+    items: List<DataItem>,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier,
+        state = rememberLazyListState()
+    ) {
+        items(
+            items = items,
+            key = { it.id } // アイテムの一意識別子を指定
+        ) { item ->
+            DataItemCard(
+                item = item,
+                modifier = Modifier.animateItemPlacement()
+            )
+        }
+    }
+}
+```
+
+### 2. メモ化の活用
+```kotlin
+@Composable
+fun ExpensiveComponent(
+    data: ComplexData,
+    modifier: Modifier = Modifier
+) {
+    val processedData = remember(data) {
+        expensiveDataProcessing(data)
+    }
+    
+    Text(
+        text = processedData.summary,
+        modifier = modifier
+    )
+}
+```
+
+このMVVMアーキテクチャベースのベストプラクティスに従うことで、保守性が高く、テスタブルで、スケーラブルなCompose Multiplatformデスクトップアプリケーションを構築できます。

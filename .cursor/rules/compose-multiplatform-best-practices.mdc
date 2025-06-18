@@ -1,0 +1,126 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Compose Multiplatform ベストプラクティス
+
+このルールは、Compose Multiplatformプロジェクトでの開発時に従うべきベストプラクティスを定義しています。
+
+## プロジェクト構造
+
+メインエントリーポイントは [main.kt](mdc:composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/main.kt) で、アプリケーションのコンポーネントは [App.kt](mdc:composeApp/src/desktopMain/kotlin/io/github/kouheisatou/static_cms/App.kt) で定義されています。
+
+プロジェクト設定は [build.gradle.kts](mdc:build.gradle.kts) （ルートプロジェクト）と [composeApp/build.gradle.kts](mdc:composeApp/build.gradle.kts) で管理されています。
+
+## Composable関数のベストプラクティス
+
+### 1. 命名規則
+- Composable関数は**パスカルケース**で命名する
+- UIの役割を明確に表現する名前を使用
+- `@Composable`アノテーションを必ず付ける
+
+### 2. パラメータ設計
+- `modifier: Modifier = Modifier`を最初のパラメータにする
+- 必須パラメータを先に、オプションパラメータを後に配置
+- デフォルト値を適切に設定
+
+### 3. 状態管理
+- `remember`を使用してComposable内で状態を管理
+- `mutableStateOf`で可変状態を作成
+- 状態の範囲を最小限に抑える
+
+```kotlin
+@Composable
+fun MyComponent(
+    modifier: Modifier = Modifier,
+    title: String,
+    onAction: () -> Unit = {}
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    // コンポーネントの実装
+}
+```
+
+## アーキテクチャのベストプラクティス
+
+### 1. レイヤー分離
+- **UI層**: Composable関数とUIロジック
+- **ViewModel層**: ビジネスロジックと状態管理
+- **Repository層**: データアクセスとAPI呼び出し
+
+### 2. 依存関係の管理
+- `androidx.lifecycle.viewmodel`を使用してViewModelを実装
+- 依存性注入を活用してテスタビリティを向上
+- 依存関係は [composeApp/build.gradle.kts](mdc:composeApp/build.gradle.kts) で管理
+
+### 3. パフォーマンス最適化
+- 不要な再コンポジションを避ける
+- `LazyColumn`や`LazyRow`を大量データに使用
+- `derivedStateOf`を計算コストの高い処理に使用
+
+## マルチプラットフォーム対応
+
+### 1. 共通コードとプラットフォーム固有コード
+- `commonMain`に共通のUIロジックを配置
+- プラットフォーム固有の実装は各プラットフォームのsourceSetに配置
+- `expect/actual`キーワードでプラットフォーム固有の機能を抽象化
+
+### 2. リソース管理
+- Compose Resourcesを使用して画像やファイルを管理
+- プラットフォーム間でリソースを共有
+- `composeResources`ディレクトリ以下にリソースを配置
+
+### 3. ナビゲーション
+- プラットフォームに応じたナビゲーションパターンを採用
+- 共通のナビゲーション状態を`commonMain`で管理
+
+## テストのベストプラクティス
+
+### 1. UIテスト
+- `@Preview`アノテーションでコンポーネントのプレビューを作成
+- ComposeのUIテストライブラリを使用
+- スクリーンショットテストを活用
+
+### 2. ユニットテスト
+- ViewModelやビジネスロジックの単体テスト
+- `kotlin.test`を使用したクロスプラットフォームテスト
+- テストは`commonTest`に配置
+
+## パッケージング・デプロイメント
+
+### 1. ビルド設定
+- [composeApp/build.gradle.kts](mdc:composeApp/build.gradle.kts) でターゲットプラットフォームを設定
+- 適切なパッケージ形式（DMG, MSI, DEB）を選択
+- バージョン管理とメタデータの設定
+
+### 2. リリース準備
+- ProGuard/R8でコードの難読化と最適化
+- 署名とセキュリティ設定
+- 配布用パッケージの作成
+
+## 開発ツールの活用
+
+### 1. デバッグ
+- Compose UIのプレビュー機能を活用
+- Layout Inspectorでレイアウトを検証
+- ホットリロードで開発効率を向上
+
+### 2. コード品質
+- Lint警告に対処
+- 一貫したコーディングスタイルを維持
+- ドキュメンテーションの充実
+
+## セキュリティ考慮事項
+
+### 1. 認証・認可
+- セキュアな認証フローの実装
+- トークンの安全な保存
+- プラットフォーム固有のセキュリティ機能の活用
+
+### 2. データ保護
+- 機密データの暗号化
+- セキュアな通信プロトコルの使用
+- ユーザープライバシーの保護
+
+このルールに従ってCompose Multiplatformプロジェクトを開発することで、保守性が高く、スケーラブルで、高品質なアプリケーションを構築できます。
