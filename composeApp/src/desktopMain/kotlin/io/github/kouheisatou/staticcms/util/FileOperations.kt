@@ -3,7 +3,13 @@ package io.github.kouheisatou.staticcms.util
 import com.github.doyaaaaaken.kotlincsv.dsl.csvReader
 import com.github.doyaaaaaken.kotlincsv.dsl.csvWriter
 import io.github.kouheisatou.staticcms.model.*
+import java.awt.Image
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
 import java.io.File
+import javax.imageio.ImageIO
+import javax.swing.JFileChooser
+import javax.swing.filechooser.FileNameExtensionFilter
 import kotlinx.coroutines.*
 
 object FileOperations {
@@ -146,25 +152,155 @@ object FileOperations {
         }
     }
 
-    // 画像の簡単なリサイズ処理（実際の実装では適切な画像処理ライブラリを使用）
-    fun processAndCopyImage(
+    /** ファイル選択ダイアログを表示して画像ファイルを選択 */
+    fun selectImageFile(): File? {
+        return try {
+            val fileChooser =
+                JFileChooser().apply {
+                    dialogTitle = "Select Image File"
+                    fileFilter =
+                        FileNameExtensionFilter(
+                            "Image files (*.jpg, *.jpeg, *.png, *.gif, *.bmp)",
+                            "jpg",
+                            "jpeg",
+                            "png",
+                            "gif",
+                            "bmp")
+                    fileSelectionMode = JFileChooser.FILES_ONLY
+                    isMultiSelectionEnabled = false
+                    currentDirectory = File(System.getProperty("user.home"))
+                }
+
+            val result = fileChooser.showOpenDialog(null)
+            if (result == JFileChooser.APPROVE_OPTION) {
+                fileChooser.selectedFile
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            println("Error showing file dialog: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * 画像をリサイズして圧縮し、指定されたファイル名で保存
+     *
+     * @param sourceFile 元画像ファイル
+     * @param targetDir 保存先ディレクトリ
+     * @param targetFileName 保存ファイル名（id + 拡張子）
+     * @param maxWidth 最大幅（デフォルト800px）
+     * @param quality 圧縮品質（0.0-1.0、デフォルト0.8）
+     * @return 保存されたファイル名（失敗時はnull）
+     */
+    fun processAndSaveImage(
         sourceFile: File,
         targetDir: File,
+        targetFileName: String,
         maxWidth: Int = 800,
+        quality: Float = 0.8f
     ): String? {
-        try {
+        return try {
+            // 保存先ディレクトリの作成
             if (!targetDir.exists()) {
                 targetDir.mkdirs()
             }
 
-            val targetFile = File(targetDir, sourceFile.name)
-            sourceFile.copyTo(targetFile, overwrite = true)
+            // 元画像の読み込み
+            val originalImage =
+                ImageIO.read(sourceFile) ?: throw Exception("Cannot read image file")
 
-            return "./media/${sourceFile.name}"
+            // リサイズ計算
+            val originalWidth = originalImage.width
+            val originalHeight = originalImage.height
+
+            val (newWidth, newHeight) =
+                if (originalWidth > maxWidth) {
+                    val ratio = maxWidth.toFloat() / originalWidth
+                    Pair(maxWidth, (originalHeight * ratio).toInt())
+                } else {
+                    Pair(originalWidth, originalHeight)
+                }
+
+            // リサイズ処理
+            val resizedImage = BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB)
+            val graphics =
+                resizedImage.createGraphics().apply {
+                    setRenderingHint(
+                        RenderingHints.KEY_INTERPOLATION,
+                        RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+                    setRenderingHint(
+                        RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+                    setRenderingHint(
+                        RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                }
+
+            graphics.drawImage(
+                originalImage.getScaledInstance(newWidth, newHeight, Image.SCALE_SMOOTH),
+                0,
+                0,
+                null)
+            graphics.dispose()
+
+            // ファイル保存
+            val targetFile = File(targetDir, targetFileName)
+            val formatName = targetFileName.substringAfterLast(".").lowercase()
+
+            // JPEGの場合は品質設定付きで保存
+            if (formatName == "jpg" || formatName == "jpeg") {
+                val writers = ImageIO.getImageWritersByFormatName("jpeg")
+                if (writers.hasNext()) {
+                    val writer = writers.next()
+                    val writeParam =
+                        writer.defaultWriteParam.apply {
+                            compressionMode = javax.imageio.ImageWriteParam.MODE_EXPLICIT
+                            compressionQuality = quality
+                        }
+
+                    val output = javax.imageio.stream.FileImageOutputStream(targetFile)
+                    writer.output = output
+                    writer.write(null, javax.imageio.IIOImage(resizedImage, null, null), writeParam)
+                    writer.dispose()
+                    output.close()
+                } else {
+                    ImageIO.write(resizedImage, "jpeg", targetFile)
+                }
+            } else {
+                ImageIO.write(resizedImage, formatName, targetFile)
+            }
+
+            println("Image processed and saved: ${targetFile.absolutePath}")
+            targetFileName
         } catch (e: Exception) {
             println("Error processing image: ${e.message}")
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Thumbnailカラムの画像選択と処理を行う
+     *
+     * @param rowId 行のID
+     * @param targetDir 保存先ディレクトリ
+     * @return 保存されたファイル名（失敗時はnull）
+     */
+    fun selectAndProcessThumbnailImage(rowId: String, targetDir: File): String? {
+        // ファイル選択ダイアログ表示
+        val selectedFile = selectImageFile() ?: return null
+
+        // 拡張子を取得
+        val extension = selectedFile.extension.lowercase()
+        if (extension !in listOf("jpg", "jpeg", "png", "gif", "bmp")) {
+            println("Unsupported image format: $extension")
             return null
         }
+
+        // ファイル名を id.拡張子 の形式で設定
+        val targetFileName = "$rowId.$extension"
+
+        // 画像処理と保存
+        return processAndSaveImage(selectedFile, targetDir, targetFileName)
     }
 
     suspend fun simulateClone(

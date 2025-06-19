@@ -264,6 +264,38 @@ class StaticCMSViewModel {
         scope.launch(Dispatchers.IO) { saveDirectoryToFile(updatedDirectory) }
     }
 
+    /** Thumbnailカラムでの画像選択処理 */
+    fun selectThumbnailImage(directoryIndex: Int, rowIndex: Int, colIndex: Int) {
+        val currentState = _state.value
+        val directory = currentState.contentDirectories.getOrNull(directoryIndex) ?: return
+        val row = directory.data.getOrNull(rowIndex) ?: return
+
+        // Thumbnailカラムのみ対応
+        if (directory.type != DirectoryType.ARTICLE || colIndex != 3) {
+            return
+        }
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                // 保存先ディレクトリ（directory内のimageフォルダまたは各行のmediaフォルダ）
+                val imageDir = File(directory.path, "images").apply { if (!exists()) mkdirs() }
+
+                // 画像選択と処理
+                val savedFileName = FileOperations.selectAndProcessThumbnailImage(row.id, imageDir)
+
+                if (savedFileName != null) {
+                    // CSVファイルを更新
+                    withContext(Dispatchers.Main) {
+                        updateCellValue(directoryIndex, rowIndex, colIndex, savedFileName)
+                    }
+                }
+            } catch (e: Exception) {
+                println("Error selecting thumbnail image: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
+
     // Article management methods
 
     fun openArticle(rowIndex: Int, colIndex: Int) {

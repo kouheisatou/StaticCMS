@@ -23,6 +23,7 @@ fun MainScreen(
     onDirectorySelected: (Int) -> Unit,
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit,
     onCellEdit: (directoryIndex: Int, rowIndex: Int, colIndex: Int, newValue: String) -> Unit,
+    onThumbnailClick: (directoryIndex: Int, rowIndex: Int, colIndex: Int) -> Unit,
     onCommitAndPush: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -44,6 +45,7 @@ fun MainScreen(
                 onDirectorySelected = onDirectorySelected,
                 onCellClick = onCellClick,
                 onCellEdit = onCellEdit,
+                onThumbnailClick = onThumbnailClick,
                 onCommitAndPush = onCommitAndPush,
                 resetEditingTrigger = resetEditingTrigger)
         }
@@ -71,6 +73,7 @@ private fun MainContent(
     onDirectorySelected: (Int) -> Unit,
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit,
     onCellEdit: (directoryIndex: Int, rowIndex: Int, colIndex: Int, newValue: String) -> Unit,
+    onThumbnailClick: (directoryIndex: Int, rowIndex: Int, colIndex: Int) -> Unit,
     onCommitAndPush: () -> Unit,
     resetEditingTrigger: Int,
 ) {
@@ -87,6 +90,7 @@ private fun MainContent(
             selectedDirectoryIndex = selectedDirectoryIndex,
             onCellClick = onCellClick,
             onCellEdit = onCellEdit,
+            onThumbnailClick = onThumbnailClick,
             resetEditingTrigger = resetEditingTrigger)
     }
 }
@@ -144,6 +148,7 @@ private fun ContentArea(
     selectedDirectoryIndex: Int,
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit,
     onCellEdit: (directoryIndex: Int, rowIndex: Int, colIndex: Int, newValue: String) -> Unit,
+    onThumbnailClick: (directoryIndex: Int, rowIndex: Int, colIndex: Int) -> Unit,
     resetEditingTrigger: Int,
 ) {
     val selectedDirectory = contentDirectories.getOrNull(selectedDirectoryIndex)
@@ -154,6 +159,7 @@ private fun ContentArea(
             directoryIndex = selectedDirectoryIndex,
             onCellClick = onCellClick,
             onCellEdit = onCellEdit,
+            onThumbnailClick = onThumbnailClick,
             resetEditingTrigger = resetEditingTrigger,
             modifier = Modifier.fillMaxSize(),
         )
@@ -166,6 +172,7 @@ private fun DirectoryContent(
     directoryIndex: Int,
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit,
     onCellEdit: (directoryIndex: Int, rowIndex: Int, colIndex: Int, newValue: String) -> Unit,
+    onThumbnailClick: (directoryIndex: Int, rowIndex: Int, colIndex: Int) -> Unit,
     resetEditingTrigger: Int,
     modifier: Modifier = Modifier,
 ) {
@@ -180,6 +187,7 @@ private fun DirectoryContent(
                 directoryIndex = directoryIndex,
                 onCellClick = onCellClick,
                 onCellEdit = onCellEdit,
+                onThumbnailClick = onThumbnailClick,
                 resetEditingTrigger = resetEditingTrigger)
             DirectoryInstructions(directory = directory)
         } else {
@@ -216,6 +224,7 @@ private fun DirectoryTable(
     directoryIndex: Int,
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit,
     onCellEdit: (directoryIndex: Int, rowIndex: Int, colIndex: Int, newValue: String) -> Unit,
+    onThumbnailClick: (directoryIndex: Int, rowIndex: Int, colIndex: Int) -> Unit,
     resetEditingTrigger: Int,
 ) {
     val headers = buildTableHeaders(directory)
@@ -231,9 +240,16 @@ private fun DirectoryTable(
             headers = headers,
             rows = rows,
             onCellClick = { rowIndex, colIndex ->
-                // Allow clicking on ID column for article types to open detail view
-                if (colIndex == 0 && directory.type == DirectoryType.ARTICLE) {
-                    onCellClick(rowIndex, colIndex)
+                // Handle different column clicks
+                when {
+                    // ID column for article types opens detail view
+                    colIndex == 0 && directory.type == DirectoryType.ARTICLE -> {
+                        onCellClick(rowIndex, colIndex)
+                    }
+                    // Thumbnail column for article types opens image selector
+                    colIndex == 3 && directory.type == DirectoryType.ARTICLE -> {
+                        onThumbnailClick(directoryIndex, rowIndex, colIndex)
+                    }
                 }
             },
             onCellEdit = { rowIndex, colIndex, newValue ->

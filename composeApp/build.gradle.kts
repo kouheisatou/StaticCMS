@@ -50,6 +50,9 @@ kotlin {
             implementation("io.ktor:ktor-server-core:3.0.1")
             implementation("io.ktor:ktor-server-cio:3.0.1")
             implementation("io.ktor:ktor-server-html-builder:3.0.1")
+
+            // File chooser dialog (JNA not needed for basic JFileChooser)
+            // Using standard Java Swing components for file selection
         }
     }
 }

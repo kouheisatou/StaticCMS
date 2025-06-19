@@ -69,6 +69,9 @@ fun app() {
                     onCellEdit = { directoryIndex, rowIndex, colIndex, newValue ->
                         viewModel.updateCellValue(directoryIndex, rowIndex, colIndex, newValue)
                     },
+                    onThumbnailClick = { directoryIndex, rowIndex, colIndex ->
+                        viewModel.selectThumbnailImage(directoryIndex, rowIndex, colIndex)
+                    },
                     onCommitAndPush = { viewModel.commitAndPush("Update content via StaticCMS") },
                 )
             }
