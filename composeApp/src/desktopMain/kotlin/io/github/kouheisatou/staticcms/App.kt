@@ -1,10 +1,10 @@
 package io.github.kouheisatou.staticcms
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.window.WindowState
 import io.github.kouheisatou.staticcms.model.AppScreen
 import io.github.kouheisatou.staticcms.screens.ArticleDetailScreen
@@ -17,10 +17,7 @@ import io.github.kouheisatou.staticcms.viewmodel.StaticCMSViewModel
 
 /** Main application composable function Manages the overall navigation and screen flow */
 @Composable
-fun app(
-    windowState: WindowState? = null,
-    onCloseRequest: (() -> Unit)? = null
-) {
+fun app(windowState: WindowState? = null, onCloseRequest: (() -> Unit)? = null) {
     val viewModel = remember { StaticCMSViewModel() }
 
     // Collect state flows
@@ -93,15 +90,11 @@ fun app(
                         viewModel.selectThumbnailImage(directoryIndex, rowIndex, colIndex)
                     },
                     onCommitAndPush = { viewModel.commitAndPush("Update content via StaticCMS") },
-                    onAddRow = { directoryIndex ->
-                        viewModel.addNewRow(directoryIndex)
-                    },
+                    onAddRow = { directoryIndex -> viewModel.addNewRow(directoryIndex) },
                     onDeleteRow = { directoryIndex, rowIndex ->
                         viewModel.deleteRow(directoryIndex, rowIndex)
                     },
-                    onBackToRepositorySelection = {
-                        viewModel.returnToRepositorySelection()
-                    },
+                    onBackToRepositorySelection = { viewModel.returnToRepositorySelection() },
                 )
             }
             AppScreen.ARTICLE_DETAIL -> {

@@ -182,12 +182,12 @@ class GitOperations {
             try {
                 // Get local and remote commit IDs
                 val localHead = git.repository.resolve("HEAD")
-                val remoteHead = git.repository.resolve("origin/main") 
-                    ?: git.repository.resolve("origin/master")
-                
+                val remoteHead =
+                    git.repository.resolve("origin/main") ?: git.repository.resolve("origin/master")
+
                 // If remote head is null, assume we have unpushed changes
                 if (remoteHead == null) return@withContext true
-                
+
                 // Check if local head is ahead of remote head
                 localHead != remoteHead
             } catch (e: Exception) {

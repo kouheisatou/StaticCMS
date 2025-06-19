@@ -287,19 +287,19 @@ object FileOperations {
      * @return 保存されたファイル名（失敗時はnull）
      */
     suspend fun selectAndProcessThumbnailImageAsync(
-        rowId: String, 
+        rowId: String,
         targetDir: File,
         onProgress: suspend (Float, String) -> Unit = { _, _ -> }
     ): String? {
         return withContext(Dispatchers.IO) {
             try {
                 onProgress(0.1f, "Opening file dialog...")
-                
+
                 // ファイル選択ダイアログ表示
                 val selectedFile = selectImageFile() ?: return@withContext null
-                
+
                 onProgress(0.3f, "Validating image format...")
-                
+
                 // 拡張子を取得
                 val extension = selectedFile.extension.lowercase()
                 if (extension !in listOf("jpg", "jpeg", "png", "gif", "bmp")) {
@@ -308,19 +308,20 @@ object FileOperations {
                 }
 
                 onProgress(0.5f, "Preparing image processing...")
-                
+
                 // ファイル名を id.拡張子 の形式で設定
                 val targetFileName = "$rowId.$extension"
 
                 onProgress(0.7f, "Processing and saving image...")
-                
+
                 // 画像処理と保存
-                val result = processAndSaveImageAsync(selectedFile, targetDir, targetFileName) { progress ->
-                    // Map image processing progress from 0.7 to 1.0
-                    val mappedProgress = 0.7f + (progress * 0.3f)
-                    runBlocking { onProgress(mappedProgress, "Processing image...") }
-                }
-                
+                val result =
+                    processAndSaveImageAsync(selectedFile, targetDir, targetFileName) { progress ->
+                        // Map image processing progress from 0.7 to 1.0
+                        val mappedProgress = 0.7f + (progress * 0.3f)
+                        runBlocking { onProgress(mappedProgress, "Processing image...") }
+                    }
+
                 onProgress(1.0f, "Image processing completed")
                 result
             } catch (e: Exception) {
@@ -352,20 +353,20 @@ object FileOperations {
         return withContext(Dispatchers.IO) {
             try {
                 onProgress(0.1f)
-                
+
                 // 保存先ディレクトリの作成
                 if (!targetDir.exists()) {
                     targetDir.mkdirs()
                 }
 
                 onProgress(0.2f)
-                
+
                 // 元画像の読み込み
                 val originalImage =
                     ImageIO.read(sourceFile) ?: throw Exception("Cannot read image file")
 
                 onProgress(0.4f)
-                
+
                 // リサイズ計算
                 val originalWidth = originalImage.width
                 val originalHeight = originalImage.height
@@ -379,7 +380,7 @@ object FileOperations {
                     }
 
                 onProgress(0.6f)
-                
+
                 // リサイズ処理
                 val resizedImage = BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB)
                 val graphics =
@@ -401,7 +402,7 @@ object FileOperations {
                 graphics.dispose()
 
                 onProgress(0.8f)
-                
+
                 // ファイル保存
                 val targetFile = File(targetDir, targetFileName)
                 val formatName = targetFileName.substringAfterLast(".").lowercase()
@@ -419,7 +420,8 @@ object FileOperations {
 
                         val output = javax.imageio.stream.FileImageOutputStream(targetFile)
                         writer.output = output
-                        writer.write(null, javax.imageio.IIOImage(resizedImage, null, null), writeParam)
+                        writer.write(
+                            null, javax.imageio.IIOImage(resizedImage, null, null), writeParam)
                         writer.dispose()
                         output.close()
                     } else {
@@ -430,7 +432,7 @@ object FileOperations {
                 }
 
                 onProgress(1.0f)
-                
+
                 println("Image processed and saved: ${targetFile.absolutePath}")
                 targetFileName
             } catch (e: Exception) {
@@ -443,9 +445,7 @@ object FileOperations {
 
     // 既存のselectAndProcessThumbnailImage関数は後方互換性のために残す
     fun selectAndProcessThumbnailImage(rowId: String, targetDir: File): String? {
-        return runBlocking {
-            selectAndProcessThumbnailImageAsync(rowId, targetDir)
-        }
+        return runBlocking { selectAndProcessThumbnailImageAsync(rowId, targetDir) }
     }
 
     suspend fun simulateClone(

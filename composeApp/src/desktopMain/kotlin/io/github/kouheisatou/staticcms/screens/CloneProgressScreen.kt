@@ -26,31 +26,33 @@ fun CloneProgressScreen(
         // Smooth animation of progress
         val startProgress = animatedProgress
         val targetProgress = progress.coerceIn(0f, 1f)
-        
+
         if (targetProgress > startProgress) {
             val steps = 20
             val stepDuration = 50L
-            
+
             for (i in 1..steps) {
-                val currentProgress = startProgress + (targetProgress - startProgress) * (i.toFloat() / steps)
+                val currentProgress =
+                    startProgress + (targetProgress - startProgress) * (i.toFloat() / steps)
                 animatedProgress = currentProgress
-                
+
                 // Update status message based on progress
-                statusMessage = when {
-                    currentProgress <= 0.05f -> "Initializing clone..."
-                    currentProgress <= 0.1f -> "Connecting to remote repository..."
-                    currentProgress <= 0.5f -> "Receiving objects..."
-                    currentProgress <= 0.8f -> "Resolving deltas..."
-                    currentProgress < 1.0f -> "Checking out files..."
-                    else -> "Clone completed!"
-                }
-                
+                statusMessage =
+                    when {
+                        currentProgress <= 0.05f -> "Initializing clone..."
+                        currentProgress <= 0.1f -> "Connecting to remote repository..."
+                        currentProgress <= 0.5f -> "Receiving objects..."
+                        currentProgress <= 0.8f -> "Resolving deltas..."
+                        currentProgress < 1.0f -> "Checking out files..."
+                        else -> "Clone completed!"
+                    }
+
                 delay(stepDuration)
             }
         } else {
             animatedProgress = targetProgress
         }
-        
+
         isCompleted = targetProgress >= 1.0f
     }
 

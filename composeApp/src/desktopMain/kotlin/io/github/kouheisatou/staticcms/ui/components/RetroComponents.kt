@@ -1,23 +1,29 @@
 package io.github.kouheisatou.staticcms.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -26,22 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.kouheisatou.staticcms.ui.theme.RetroColors
 import io.github.kouheisatou.staticcms.ui.theme.RetroTypography
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.runtime.*
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.toComposeImageBitmap
-import org.jetbrains.skia.Image
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
+import org.jetbrains.skia.Image
 
 // Constants for component styling
 private object ComponentConstants {
@@ -525,9 +519,7 @@ fun RetroProgressBar(
     }
 }
 
-/**
- * Thumbnail cell component that displays only image or selection button
- */
+/** Thumbnail cell component that displays only image or selection button */
 @Composable
 fun RetroThumbnailCell(
     thumbnailPath: String,
@@ -537,7 +529,8 @@ fun RetroThumbnailCell(
     modifier: Modifier = Modifier,
     isPressed: Boolean = false
 ) {
-    var thumbnailImage by remember(thumbnailPath, baseDirectory.absolutePath) { mutableStateOf<BufferedImage?>(null) }
+    var thumbnailImage by
+        remember(thumbnailPath, baseDirectory.absolutePath) { mutableStateOf<BufferedImage?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var imageKey by remember { mutableStateOf(0) }
 
@@ -546,14 +539,13 @@ fun RetroThumbnailCell(
         if (thumbnailPath.isNotBlank()) {
             isLoading = true
             try {
-                val imageFile = File(baseDirectory, "images/$thumbnailPath").takeIf { it.exists() }
-                    ?: File(baseDirectory, thumbnailPath).takeIf { it.exists() }
-                    ?: File(baseDirectory, "$rowId.jpg").takeIf { it.exists() }
-                    ?: File(baseDirectory, "$rowId.png").takeIf { it.exists() }
+                val imageFile =
+                    File(baseDirectory, "images/$thumbnailPath").takeIf { it.exists() }
+                        ?: File(baseDirectory, thumbnailPath).takeIf { it.exists() }
+                        ?: File(baseDirectory, "$rowId.jpg").takeIf { it.exists() }
+                        ?: File(baseDirectory, "$rowId.png").takeIf { it.exists() }
 
-                thumbnailImage = imageFile?.let { 
-                    if (it.exists()) ImageIO.read(it) else null 
-                }
+                thumbnailImage = imageFile?.let { if (it.exists()) ImageIO.read(it) else null }
             } catch (e: Exception) {
                 println("Error loading thumbnail: ${e.message}")
                 thumbnailImage = null
@@ -566,83 +558,73 @@ fun RetroThumbnailCell(
     }
 
     Box(
-        modifier = modifier
-            .background(
-                when {
-                    isPressed -> RetroColors.ButtonFace
-                    else -> Color.White
+        modifier =
+            modifier
+                .background(
+                    when {
+                        isPressed -> RetroColors.ButtonFace
+                        else -> Color.White
+                    })
+                .border(1.dp, RetroColors.ButtonShadow)
+                .clickable {
+                    onThumbnailClick()
+                    // Force image refresh after click
+                    imageKey++
                 }
-            )
-            .border(1.dp, RetroColors.ButtonShadow)
-            .clickable { 
-                onThumbnailClick()
-                // Force image refresh after click
-                imageKey++
-            }
-            .padding(4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        when {
-            isLoading -> {
-                Text(
-                    text = "⏳",
-                    style = RetroTypography.Default.copy(fontSize = 14.sp),
-                    color = RetroColors.DisabledText
-                )
-            }
-            thumbnailImage != null -> {
-                val imageToShow = remember(thumbnailImage) {
-                    try {
-                        val bufferedImage = thumbnailImage!!
-                        val outputStream = java.io.ByteArrayOutputStream()
-                        javax.imageio.ImageIO.write(bufferedImage, "png", outputStream)
-                        val skiaImage = Image.makeFromEncoded(outputStream.toByteArray())
-                        skiaImage.toComposeImageBitmap()
-                    } catch (e: Exception) {
-                        println("Error converting image: ${e.message}")
-                        null
+                .padding(4.dp),
+        contentAlignment = Alignment.Center) {
+            when {
+                isLoading -> {
+                    Text(
+                        text = "⏳",
+                        style = RetroTypography.Default.copy(fontSize = 14.sp),
+                        color = RetroColors.DisabledText)
+                }
+                thumbnailImage != null -> {
+                    val imageToShow =
+                        remember(thumbnailImage) {
+                            try {
+                                val bufferedImage = thumbnailImage!!
+                                val outputStream = java.io.ByteArrayOutputStream()
+                                javax.imageio.ImageIO.write(bufferedImage, "png", outputStream)
+                                val skiaImage = Image.makeFromEncoded(outputStream.toByteArray())
+                                skiaImage.toComposeImageBitmap()
+                            } catch (e: Exception) {
+                                println("Error converting image: ${e.message}")
+                                null
+                            }
+                        }
+
+                    if (imageToShow != null) {
+                        Image(
+                            bitmap = imageToShow,
+                            contentDescription = "Thumbnail",
+                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)),
+                            contentScale = ContentScale.Crop)
+                    } else {
+                        Text(
+                            text = "❌",
+                            style = RetroTypography.Default.copy(fontSize = 14.sp),
+                            color = RetroColors.DisabledText)
                     }
                 }
-                
-                if (imageToShow != null) {
-                    Image(
-                        bitmap = imageToShow,
-                        contentDescription = "Thumbnail",
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Text(
-                        text = "❌",
-                        style = RetroTypography.Default.copy(fontSize = 14.sp),
-                        color = RetroColors.DisabledText
-                    )
+                else -> {
+                    // "画像を選択" button when no image is set
+                    RetroTextButton(
+                        text = "画像を選択",
+                        onClick = {
+                            onThumbnailClick()
+                            // Force image refresh after click
+                            imageKey++
+                        },
+                        modifier = Modifier.fillMaxWidth().height(32.dp),
+                        enabled = !isLoading)
                 }
             }
-            else -> {
-                // "画像を選択" button when no image is set
-                RetroTextButton(
-                    text = "画像を選択",
-                    onClick = {
-                        onThumbnailClick()
-                        // Force image refresh after click
-                        imageKey++
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(32.dp),
-                    enabled = !isLoading
-                )
-            }
         }
-    }
 }
 
-/**
- * Enhanced RetroEditableTable with thumbnail support and row management
- */
+/** Enhanced RetroEditableTable with thumbnail support and row management */
 @Composable
 fun RetroEditableTableWithThumbnails(
     headers: List<String>,
@@ -662,14 +644,15 @@ fun RetroEditableTableWithThumbnails(
     val thumbnailColumnWidth = 160.dp
     val deleteColumnWidth = 50.dp
     val columnWidths = buildList {
-        addAll(headers.mapIndexed { index, header ->
-            if (directoryType == io.github.kouheisatou.staticcms.model.DirectoryType.ARTICLE && 
-                header.lowercase() == "thumbnail") {
-                thumbnailColumnWidth
-            } else {
-                minColumnWidth
-            }
-        })
+        addAll(
+            headers.mapIndexed { index, header ->
+                if (directoryType == io.github.kouheisatou.staticcms.model.DirectoryType.ARTICLE &&
+                    header.lowercase() == "thumbnail") {
+                    thumbnailColumnWidth
+                } else {
+                    minColumnWidth
+                }
+            })
         add(deleteColumnWidth) // For delete button column
     }
     var editingCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -705,23 +688,17 @@ fun RetroEditableTableWithThumbnails(
                     )
                 }
             }
-            
+
             // Add row button in header
             Box(
-                modifier = Modifier
-                    .width(deleteColumnWidth)
-                    .border(1.dp, RetroColors.ButtonShadow)
-                    .padding(4.dp),
+                modifier =
+                    Modifier.width(deleteColumnWidth)
+                        .border(1.dp, RetroColors.ButtonShadow)
+                        .padding(4.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                RetroIconButton(
-                    onClick = onAddRow,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Text(
-                        text = "➕",
-                        style = RetroTypography.Default.copy(fontSize = 10.sp)
-                    )
+                RetroIconButton(onClick = onAddRow, modifier = Modifier.size(24.dp)) {
+                    Text(text = "➕", style = RetroTypography.Default.copy(fontSize = 10.sp))
                 }
             }
         }
@@ -734,8 +711,10 @@ fun RetroEditableTableWithThumbnails(
                 row.forEachIndexed { colIndex, cell ->
                     val isCurrentlyEditing = editingCell == Pair(rowIndex, colIndex)
                     val isIdColumn = colIndex == 0
-                    val isThumbnailColumn = directoryType == io.github.kouheisatou.staticcms.model.DirectoryType.ARTICLE && 
-                                          headers.getOrNull(colIndex)?.lowercase() == "thumbnail"
+                    val isThumbnailColumn =
+                        directoryType ==
+                            io.github.kouheisatou.staticcms.model.DirectoryType.ARTICLE &&
+                            headers.getOrNull(colIndex)?.lowercase() == "thumbnail"
                     var cellPressed by remember { mutableStateOf(false) }
                     var textValue by remember(cell) { mutableStateOf(cell) }
 
@@ -746,17 +725,21 @@ fun RetroEditableTableWithThumbnails(
                             rowId = row.getOrNull(0) ?: "", // Use ID column as rowId
                             baseDirectory = File(directoryPath),
                             onThumbnailClick = { onThumbnailClick(rowIndex, colIndex) },
-                            modifier = Modifier
-                                .width(columnWidths[colIndex])
-                                .height(48.dp), // Increased height for thumbnail
-                            isPressed = cellPressed
-                        )
+                            modifier =
+                                Modifier.width(columnWidths[colIndex])
+                                    .height(48.dp), // Increased height for thumbnail
+                            isPressed = cellPressed)
                     } else {
                         // Regular cell
                         Box(
                             modifier =
                                 Modifier.width(columnWidths[colIndex])
-                                    .height(if (directoryType == io.github.kouheisatou.staticcms.model.DirectoryType.ARTICLE) 48.dp else 36.dp)
+                                    .height(
+                                        if (directoryType ==
+                                            io.github.kouheisatou.staticcms.model.DirectoryType
+                                                .ARTICLE)
+                                            48.dp
+                                        else 36.dp)
                                     .border(1.dp, RetroColors.ButtonShadow)
                                     .background(
                                         when {
@@ -774,12 +757,14 @@ fun RetroEditableTableWithThumbnails(
                                                 cellPressed = false
                                                 if (released) {
                                                     when {
-                                                        isIdColumn -> onCellClick(rowIndex, colIndex)
+                                                        isIdColumn ->
+                                                            onCellClick(rowIndex, colIndex)
                                                         isEditable && !isIdColumn -> {
                                                             editingCell = Pair(rowIndex, colIndex)
                                                             textValue = cell
                                                         }
-                                                        !isEditable -> onCellClick(rowIndex, colIndex)
+                                                        !isEditable ->
+                                                            onCellClick(rowIndex, colIndex)
                                                     }
                                                 }
                                             },
@@ -805,7 +790,8 @@ fun RetroEditableTableWithThumbnails(
                                     style =
                                         RetroTypography.Default.copy(
                                             fontWeight =
-                                                if (isIdColumn) FontWeight.Bold else FontWeight.Normal,
+                                                if (isIdColumn) FontWeight.Bold
+                                                else FontWeight.Normal,
                                         ),
                                     color =
                                         if (isIdColumn) {
@@ -821,26 +807,27 @@ fun RetroEditableTableWithThumbnails(
                         }
                     }
                 }
-                
+
                 // Delete button column
                 Box(
-                    modifier = Modifier
-                        .width(deleteColumnWidth)
-                        .height(if (directoryType == io.github.kouheisatou.staticcms.model.DirectoryType.ARTICLE) 48.dp else 36.dp)
-                        .border(1.dp, RetroColors.ButtonShadow)
-                        .background(Color.White)
-                        .padding(4.dp),
+                    modifier =
+                        Modifier.width(deleteColumnWidth)
+                            .height(
+                                if (directoryType ==
+                                    io.github.kouheisatou.staticcms.model.DirectoryType.ARTICLE)
+                                    48.dp
+                                else 36.dp)
+                            .border(1.dp, RetroColors.ButtonShadow)
+                            .background(Color.White)
+                            .padding(4.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     RetroIconButton(
-                        onClick = { onDeleteRow(rowIndex) },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Text(
-                            text = "🗑️",
-                            style = RetroTypography.Default.copy(fontSize = 10.sp)
-                        )
-                    }
+                        onClick = { onDeleteRow(rowIndex) }, modifier = Modifier.size(24.dp)) {
+                            Text(
+                                text = "🗑️",
+                                style = RetroTypography.Default.copy(fontSize = 10.sp))
+                        }
                 }
             }
         }
@@ -859,9 +846,7 @@ fun RetroEditableTableWithThumbnails(
     }
 }
 
-/**
- * Simple icon button for retro style
- */
+/** Simple icon button for retro style */
 @Composable
 fun RetroIconButton(
     onClick: () -> Unit,
@@ -872,42 +857,35 @@ fun RetroIconButton(
     var pressed by remember { mutableStateOf(false) }
 
     Box(
-        modifier = modifier
-            .background(
-                when {
-                    !enabled -> RetroColors.ButtonFace.copy(alpha = 0.5f)
-                    pressed -> RetroColors.ButtonShadow
-                    else -> RetroColors.ButtonFace
+        modifier =
+            modifier
+                .background(
+                    when {
+                        !enabled -> RetroColors.ButtonFace.copy(alpha = 0.5f)
+                        pressed -> RetroColors.ButtonShadow
+                        else -> RetroColors.ButtonFace
+                    })
+                .border(
+                    1.dp, if (pressed) RetroColors.ButtonDarkShadow else RetroColors.ButtonShadow)
+                .clickable(enabled = enabled) { if (enabled) onClick() }
+                .pointerInput(Unit) {
+                    if (enabled) {
+                        detectTapGestures(
+                            onPress = {
+                                pressed = true
+                                val released = tryAwaitRelease()
+                                pressed = false
+                            })
+                    }
                 }
-            )
-            .border(
-                1.dp,
-                if (pressed) RetroColors.ButtonDarkShadow else RetroColors.ButtonShadow
-            )
-            .clickable(enabled = enabled) {
-                if (enabled) onClick()
-            }
-            .pointerInput(Unit) {
-                if (enabled) {
-                    detectTapGestures(
-                        onPress = {
-                            pressed = true
-                            val released = tryAwaitRelease()
-                            pressed = false
-                        }
-                    )
+                .padding(4.dp),
+        contentAlignment = Alignment.Center) {
+            Box(
+                modifier = if (pressed) Modifier.offset(1.dp, 1.dp) else Modifier,
+                contentAlignment = Alignment.Center) {
+                    content()
                 }
-            }
-            .padding(4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = if (pressed) Modifier.offset(1.dp, 1.dp) else Modifier,
-            contentAlignment = Alignment.Center
-        ) {
-            content()
         }
-    }
 }
 
 // Legacy RetroEditableTable for backward compatibility

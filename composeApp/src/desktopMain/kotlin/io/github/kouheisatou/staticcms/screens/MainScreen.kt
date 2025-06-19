@@ -16,8 +16,8 @@ import io.github.kouheisatou.staticcms.model.*
 import io.github.kouheisatou.staticcms.ui.components.*
 import io.github.kouheisatou.staticcms.ui.theme.RetroColors
 import io.github.kouheisatou.staticcms.ui.theme.RetroTypography
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -35,7 +35,7 @@ fun MainScreen(
     modifier: Modifier = Modifier,
 ) {
     var resetEditingTrigger by remember { mutableStateOf(0) }
-    
+
     // Mutable states for operation progress (simplified - no image processing dialog)
     var isOperationInProgress by remember { mutableStateOf(false) }
     var operationProgress by remember { mutableStateOf(0f) }
@@ -51,50 +51,47 @@ fun MainScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             // Menu bar
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(RetroColors.ButtonFace)
-                    .border(1.dp, RetroColors.ButtonShadow)
-                    .padding(8.dp),
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .background(RetroColors.ButtonFace)
+                        .border(1.dp, RetroColors.ButtonShadow)
+                        .padding(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RetroTextButton(
-                    text = "リポジトリ再選択",
-                    onClick = onBackToRepositorySelection,
-                    modifier = Modifier.width(140.dp).height(32.dp)
-                )
-                RetroTextButton(
-                    text = "Commit & Push",
-                    onClick = {
-                        // Start commit and push with progress
-                        isOperationInProgress = true
-                        operationMessage = "Committing changes..."
-                        
-                        GlobalScope.launch {
-                            val phases = listOf(
-                                "Staging files..." to 0.2f,
-                                "Creating commit..." to 0.4f,
-                                "Pushing to remote..." to 0.8f,
-                                "Completed!" to 1.0f
-                            )
-                            
-                            for ((message, progress) in phases) {
-                                operationMessage = message
-                                operationProgress = progress
-                                delay(500)
+                verticalAlignment = Alignment.CenterVertically) {
+                    RetroTextButton(
+                        text = "リポジトリ再選択",
+                        onClick = onBackToRepositorySelection,
+                        modifier = Modifier.width(140.dp).height(32.dp))
+                    RetroTextButton(
+                        text = "Commit & Push",
+                        onClick = {
+                            // Start commit and push with progress
+                            isOperationInProgress = true
+                            operationMessage = "Committing changes..."
+
+                            GlobalScope.launch {
+                                val phases =
+                                    listOf(
+                                        "Staging files..." to 0.2f,
+                                        "Creating commit..." to 0.4f,
+                                        "Pushing to remote..." to 0.8f,
+                                        "Completed!" to 1.0f)
+
+                                for ((message, progress) in phases) {
+                                    operationMessage = message
+                                    operationProgress = progress
+                                    delay(500)
+                                }
+
+                                onCommitAndPush()
+                                delay(1000)
+                                isOperationInProgress = false
+                                operationProgress = 0f
                             }
-                            
-                            onCommitAndPush()
-                            delay(1000)
-                            isOperationInProgress = false
-                            operationProgress = 0f
-                        }
-                    },
-                    modifier = Modifier.width(120.dp).height(32.dp)
-                )
-            }
-            
+                        },
+                        modifier = Modifier.width(120.dp).height(32.dp))
+                }
+
             // Content area
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {
                 if (contentDirectories.isEmpty()) {
@@ -118,45 +115,41 @@ fun MainScreen(
                         onDeleteRow = onDeleteRow,
                         resetEditingTrigger = resetEditingTrigger)
                 }
-                
+
                 // Simple progress overlay only for commit/push operations
                 if (isOperationInProgress) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(RetroColors.WindowBackground.copy(alpha = 0.8f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .padding(32.dp)
-                                .background(RetroColors.ButtonFace)
-                                .border(2.dp, RetroColors.ButtonShadow)
-                                .padding(16.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = operationMessage,
-                                    style = RetroTypography.Default,
-                                    modifier = Modifier.padding(bottom = 16.dp)
-                                )
-                                
-                                RetroProgressBar(
-                                    progress = operationProgress,
-                                    modifier = Modifier.width(200.dp).padding(bottom = 8.dp)
-                                )
-                                
-                                Text(
-                                    text = "${(operationProgress * 100).toInt()}%",
-                                    style = RetroTypography.Default.copy(fontSize = 10.sp),
-                                    color = RetroColors.DisabledText
-                                )
-                            }
+                        modifier =
+                            Modifier.fillMaxSize()
+                                .background(RetroColors.WindowBackground.copy(alpha = 0.8f)),
+                        contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier =
+                                    Modifier.padding(32.dp)
+                                        .background(RetroColors.ButtonFace)
+                                        .border(2.dp, RetroColors.ButtonShadow)
+                                        .padding(16.dp)) {
+                                    Column(
+                                        modifier = Modifier.padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = operationMessage,
+                                                style = RetroTypography.Default,
+                                                modifier = Modifier.padding(bottom = 16.dp))
+
+                                            RetroProgressBar(
+                                                progress = operationProgress,
+                                                modifier =
+                                                    Modifier.width(200.dp).padding(bottom = 8.dp))
+
+                                            Text(
+                                                text = "${(operationProgress * 100).toInt()}%",
+                                                style =
+                                                    RetroTypography.Default.copy(fontSize = 10.sp),
+                                                color = RetroColors.DisabledText)
+                                        }
+                                }
                         }
-                    }
                 }
             }
         }
@@ -349,7 +342,8 @@ private fun DirectoryTable(
                         onCellClick(rowIndex, colIndex)
                     }
                     // Other columns for non-thumbnail cells
-                    !(directory.type == DirectoryType.ARTICLE && headers.getOrNull(colIndex)?.lowercase() == "thumbnail") -> {
+                    !(directory.type == DirectoryType.ARTICLE &&
+                        headers.getOrNull(colIndex)?.lowercase() == "thumbnail") -> {
                         // Handle regular cell clicks for non-thumbnail columns
                     }
                 }
@@ -376,7 +370,8 @@ private fun DirectoryInstructions(
         when {
             directory.type == DirectoryType.ARTICLE && directory.data.isNotEmpty() ->
                 "Click on an ID to edit the article details | Click thumbnail or '画像を選択' button to select/change image | Click ➕ to add row | Click 🗑️ to delete row | Click on other cells to edit (auto-saved)"
-            directory.data.isNotEmpty() -> "Click ➕ to add row | Click 🗑️ to delete row | Click on cells to edit (auto-saved)"
+            directory.data.isNotEmpty() ->
+                "Click ➕ to add row | Click 🗑️ to delete row | Click on cells to edit (auto-saved)"
             else -> null
         }
 

@@ -60,10 +60,15 @@ class StaticCMSViewModel {
     // Sealed class for file operation states
     sealed class FileOperationState {
         object Idle : FileOperationState()
+
         data class Saving(val message: String) : FileOperationState()
+
         data class ImageProcessing(val message: String) : FileOperationState()
+
         data class Loading(val message: String) : FileOperationState()
+
         data class Success(val message: String) : FileOperationState()
+
         data class Error(val message: String) : FileOperationState()
     }
 
@@ -76,16 +81,17 @@ class StaticCMSViewModel {
     private fun loadSavedConfiguration() {
         scope.launch(Dispatchers.IO) {
             try {
-                val configFile = File(System.getProperty("user.home"), ".staticcms/$CONFIG_FILE_NAME")
+                val configFile =
+                    File(System.getProperty("user.home"), ".staticcms/$CONFIG_FILE_NAME")
                 if (configFile.exists()) {
                     val properties = Properties()
                     configFile.inputStream().use { properties.load(it) }
-                    
+
                     val savedRepoUrl = properties.getProperty("repository.url")
                     val savedRepoOwner = properties.getProperty("repository.owner")
                     val savedRepoName = properties.getProperty("repository.name")
                     val savedLocalPath = properties.getProperty("repository.localPath")
-                    
+
                     if (!savedRepoUrl.isNullOrBlank() && !savedLocalPath.isNullOrBlank()) {
                         val localPath = File(savedLocalPath)
                         if (localPath.exists() && File(localPath, ".git").exists()) {
@@ -107,24 +113,21 @@ class StaticCMSViewModel {
             // Open existing git repository
             val git = Git.open(localPath)
             currentGitRepository = git
-            
+
             // Load content directories
-            val contentDirectories = withContext(Dispatchers.IO) { 
-                FileOperations.scanContentDirectories(localPath) 
-            }
-            
+            val contentDirectories =
+                withContext(Dispatchers.IO) { FileOperations.scanContentDirectories(localPath) }
+
             updateState {
                 copy(
                     currentScreen = AppScreen.MAIN_VIEW,
                     repositoryUrl = repositoryUrl,
                     contentDirectories = contentDirectories,
-                    rootDirectory = localPath
-                )
+                    rootDirectory = localPath)
             }
-            
+
             // Check for unpushed changes
             checkUnpushedChanges()
-            
         } catch (e: Exception) {
             println("Failed to auto-load repository: ${e.message}")
             // Fallback to GitHub authentication screen
@@ -137,21 +140,20 @@ class StaticCMSViewModel {
             try {
                 val configDir = File(System.getProperty("user.home"), ".staticcms")
                 configDir.mkdirs()
-                
+
                 val configFile = File(configDir, CONFIG_FILE_NAME)
                 val properties = Properties()
-                
+
                 properties.setProperty("repository.url", repositoryUrl)
                 properties.setProperty("repository.localPath", localPath)
-                
+
                 // Parse owner and repo name from URL
                 gitOperations.parseRepositoryUrl(repositoryUrl)?.let { (owner, repo) ->
                     properties.setProperty("repository.owner", owner)
                     properties.setProperty("repository.name", repo)
                 }
-                
+
                 configFile.outputStream().use { properties.store(it, "StaticCMS Configuration") }
-                
             } catch (e: Exception) {
                 println("Failed to save configuration: ${e.message}")
             }
@@ -237,14 +239,13 @@ class StaticCMSViewModel {
     fun loadRepositories() {
         scope.launch {
             updateState { copy(isLoadingRepositories = true) }
-            
+
             try {
                 val repositories = gitHubApiClient.getUserRepositories().getOrThrow()
-                
+
                 updateState {
                     copy(availableRepositories = repositories, isLoadingRepositories = false)
                 }
-                
             } catch (e: Exception) {
                 updateState {
                     copy(availableRepositories = emptyList(), isLoadingRepositories = false)
@@ -378,12 +379,13 @@ class StaticCMSViewModel {
         val rootDir = _state.value.rootDirectory ?: return
 
         scope.launch(Dispatchers.IO) {
-            updateFileOperationState(FileOperationState.Loading("Refreshing content directories..."))
+            updateFileOperationState(
+                FileOperationState.Loading("Refreshing content directories..."))
             updateFileOperationProgress(0.3f)
-            
+
             try {
                 val contentDirectories = FileOperations.scanContentDirectories(rootDir)
-                
+
                 updateFileOperationProgress(0.8f)
                 delay(200)
 
@@ -396,7 +398,8 @@ class StaticCMSViewModel {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    updateFileOperationState(FileOperationState.Error("Failed to refresh directories: ${e.message}"))
+                    updateFileOperationState(
+                        FileOperationState.Error("Failed to refresh directories: ${e.message}"))
                     delay(2000)
                     updateFileOperationState(FileOperationState.Idle)
                     resetFileOperationProgress()
@@ -415,21 +418,20 @@ class StaticCMSViewModel {
                 val updatedRow = updateRowValue(row, colIndex, newValue, directory.type)
                 val updatedDirectory = updateDirectoryData(directory, rowIndex, updatedRow)
                 val updatedDirectories =
-                    updateDirectoriesList(currentState.contentDirectories, directoryIndex, updatedDirectory)
+                    updateDirectoriesList(
+                        currentState.contentDirectories, directoryIndex, updatedDirectory)
 
                 updateState { copy(contentDirectories = updatedDirectories) }
-                
-                withContext(Dispatchers.IO) { 
-                    saveDirectoryToFile(updatedDirectory) 
-                }
-                
+
+                withContext(Dispatchers.IO) { saveDirectoryToFile(updatedDirectory) }
+
                 // Check for unpushed changes after making changes
                 checkUnpushedChanges()
-                
             } catch (e: Exception) {
                 println("Failed to update cell: ${e.message}")
                 withContext(Dispatchers.Main) {
-                    updateFileOperationState(FileOperationState.Error("Failed to update cell: ${e.message}"))
+                    updateFileOperationState(
+                        FileOperationState.Error("Failed to update cell: ${e.message}"))
                     delay(2000)
                     updateFileOperationState(FileOperationState.Idle)
                 }
@@ -461,24 +463,25 @@ class StaticCMSViewModel {
                     val updatedRow = updateRowValue(row, colIndex, savedFileName, directory.type)
                     val updatedDirectory = updateDirectoryData(directory, rowIndex, updatedRow)
                     val updatedDirectories =
-                        updateDirectoriesList(currentState.contentDirectories, directoryIndex, updatedDirectory)
+                        updateDirectoriesList(
+                            currentState.contentDirectories, directoryIndex, updatedDirectory)
 
                     withContext(Dispatchers.Main) {
                         updateState { copy(contentDirectories = updatedDirectories) }
                     }
-                    
+
                     // CSVファイルを保存
                     saveDirectoryToFile(updatedDirectory)
-                    
+
                     // Check for unpushed changes after making changes
                     checkUnpushedChanges()
                 }
-                
             } catch (e: Exception) {
                 println("Error selecting thumbnail image: ${e.message}")
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    updateFileOperationState(FileOperationState.Error("Image processing failed: ${e.message}"))
+                    updateFileOperationState(
+                        FileOperationState.Error("Image processing failed: ${e.message}"))
                     delay(2000)
                     updateFileOperationState(FileOperationState.Idle)
                 }
@@ -496,37 +499,39 @@ class StaticCMSViewModel {
                 // Generate new ID
                 val maxId = directory.data.maxOfOrNull { it.id.toIntOrNull() ?: 0 } ?: 0
                 val newId = (maxId + 1).toString()
-                
+
                 // Create new row
-                val newRow = CsvRow(
-                    id = newId,
-                    nameJa = "",
-                    nameEn = "",
-                    thumbnail = if (directory.type == DirectoryType.ARTICLE) "" else null,
-                    descJa = if (directory.type == DirectoryType.ARTICLE) "" else null,
-                    descEn = if (directory.type == DirectoryType.ARTICLE) "" else null,
-                    additionalFields = directory.data.firstOrNull()?.additionalFields?.mapValues { "" } ?: emptyMap()
-                )
-                
+                val newRow =
+                    CsvRow(
+                        id = newId,
+                        nameJa = "",
+                        nameEn = "",
+                        thumbnail = if (directory.type == DirectoryType.ARTICLE) "" else null,
+                        descJa = if (directory.type == DirectoryType.ARTICLE) "" else null,
+                        descEn = if (directory.type == DirectoryType.ARTICLE) "" else null,
+                        additionalFields =
+                            directory.data.firstOrNull()?.additionalFields?.mapValues { "" }
+                                ?: emptyMap())
+
                 // Update directory data
                 val updatedData = directory.data.toMutableList().apply { add(newRow) }
                 val updatedDirectory = directory.copy(data = updatedData)
-                val updatedDirectories = updateDirectoriesList(currentState.contentDirectories, directoryIndex, updatedDirectory)
-                
+                val updatedDirectories =
+                    updateDirectoriesList(
+                        currentState.contentDirectories, directoryIndex, updatedDirectory)
+
                 updateState { copy(contentDirectories = updatedDirectories) }
-                
+
                 // Save to file
-                withContext(Dispatchers.IO) {
-                    saveDirectoryToFile(updatedDirectory)
-                }
-                
+                withContext(Dispatchers.IO) { saveDirectoryToFile(updatedDirectory) }
+
                 // Check for unpushed changes after making changes
                 checkUnpushedChanges()
-                
             } catch (e: Exception) {
                 println("Failed to add row: ${e.message}")
                 withContext(Dispatchers.Main) {
-                    updateFileOperationState(FileOperationState.Error("Failed to add row: ${e.message}"))
+                    updateFileOperationState(
+                        FileOperationState.Error("Failed to add row: ${e.message}"))
                     delay(2000)
                     updateFileOperationState(FileOperationState.Idle)
                 }
@@ -538,7 +543,7 @@ class StaticCMSViewModel {
     fun deleteRow(directoryIndex: Int, rowIndex: Int) {
         val currentState = _state.value
         val directory = currentState.contentDirectories.getOrNull(directoryIndex) ?: return
-        
+
         if (rowIndex < 0 || rowIndex >= directory.data.size) return
 
         scope.launch {
@@ -546,22 +551,22 @@ class StaticCMSViewModel {
                 // Remove row
                 val updatedData = directory.data.toMutableList().apply { removeAt(rowIndex) }
                 val updatedDirectory = directory.copy(data = updatedData)
-                val updatedDirectories = updateDirectoriesList(currentState.contentDirectories, directoryIndex, updatedDirectory)
-                
+                val updatedDirectories =
+                    updateDirectoriesList(
+                        currentState.contentDirectories, directoryIndex, updatedDirectory)
+
                 updateState { copy(contentDirectories = updatedDirectories) }
-                
+
                 // Save to file
-                withContext(Dispatchers.IO) {
-                    saveDirectoryToFile(updatedDirectory)
-                }
-                
+                withContext(Dispatchers.IO) { saveDirectoryToFile(updatedDirectory) }
+
                 // Check for unpushed changes after making changes
                 checkUnpushedChanges()
-                
             } catch (e: Exception) {
                 println("Failed to delete row: ${e.message}")
                 withContext(Dispatchers.Main) {
-                    updateFileOperationState(FileOperationState.Error("Failed to delete row: ${e.message}"))
+                    updateFileOperationState(
+                        FileOperationState.Error("Failed to delete row: ${e.message}"))
                     delay(2000)
                     updateFileOperationState(FileOperationState.Idle)
                 }
@@ -619,7 +624,7 @@ class StaticCMSViewModel {
             scope.launch(Dispatchers.IO) {
                 updateFileOperationState(FileOperationState.Saving("Saving article..."))
                 updateFileOperationProgress(0.5f)
-                
+
                 try {
                     FileOperations.writeMarkdownFile(currentArticle, currentArticle.content)
                     updateFileOperationProgress(1.0f)
@@ -628,7 +633,8 @@ class StaticCMSViewModel {
                     updateFileOperationState(FileOperationState.Idle)
                     resetFileOperationProgress()
                 } catch (e: Exception) {
-                    updateFileOperationState(FileOperationState.Error("Failed to save article: ${e.message}"))
+                    updateFileOperationState(
+                        FileOperationState.Error("Failed to save article: ${e.message}"))
                     delay(2000)
                     updateFileOperationState(FileOperationState.Idle)
                     resetFileOperationProgress()
