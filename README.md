@@ -2,6 +2,10 @@
 
 静的サイトコンテンツ管理システム - Windows95風レトロUIデスクトップアプリケーション
 
+[![Build and Package](https://github.com/kouheisatou/StaticCMS/actions/workflows/build.yml/badge.svg)](https://github.com/kouheisatou/StaticCMS/actions/workflows/build.yml)
+[![Release](https://github.com/kouheisatou/StaticCMS/actions/workflows/release.yml/badge.svg)](https://github.com/kouheisatou/StaticCMS/actions/workflows/release.yml)
+[![Pull Request Check](https://github.com/kouheisatou/StaticCMS/actions/workflows/pr.yml/badge.svg)](https://github.com/kouheisatou/StaticCMS/actions/workflows/pr.yml)
+
 ## 概要
 
 StaticCMSは、GitHubリポジトリと連携してCSV・Markdownファイルベースの静的サイトコンテンツを管理するデスクトップアプリケーションです。懐かしいWindows95風のUIで、Git操作の知識がなくても簡単にWebサイトコンテンツの更新ができます。
@@ -31,6 +35,14 @@ StaticCMSは、GitHubリポジトリと連携してCSV・Markdownファイルベ
 - **Git**: JGit Library
 - **アーキテクチャ**: MVVM + Repository Pattern
 
+## ダウンロード
+
+最新のリリースは [Releases](https://github.com/kouheisatou/StaticCMS/releases) からダウンロードできます：
+
+- **Windows**: `.msi`インストーラー
+- **macOS**: `.dmg`ディスクイメージ  
+- **Linux**: `.deb`パッケージ
+
 ## セットアップ
 
 ### 前提条件
@@ -39,13 +51,23 @@ StaticCMSは、GitHubリポジトリと連携してCSV・Markdownファイルベ
 
 ### インストール & 実行
 
+#### リリース版を使用する場合
+1. [Releases](https://github.com/kouheisatou/StaticCMS/releases)から最新版をダウンロード
+2. お使いのOSに応じたインストーラーを実行
+
+#### ソースからビルドする場合
 ```bash
 # リポジトリクローン
-git clone https://github.com/yourusername/StaticCMS.git
+git clone https://github.com/kouheisatou/StaticCMS.git
 cd StaticCMS
 
 # アプリケーション実行
 ./gradlew :composeApp:run
+
+# または各プラットフォーム向けパッケージ作成
+./gradlew packageDmg        # macOS
+./gradlew packageMsi        # Windows  
+./gradlew packageDeb        # Linux
 ```
 
 ### GitHub Personal Access Token取得
