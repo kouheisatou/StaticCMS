@@ -176,6 +176,27 @@ class GitOperations {
         }
     }
 
+    /** Check if there are unpushed changes */
+    suspend fun hasUnpushedChanges(git: Git): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                // Get local and remote commit IDs
+                val localHead = git.repository.resolve("HEAD")
+                val remoteHead = git.repository.resolve("origin/main") 
+                    ?: git.repository.resolve("origin/master")
+                
+                // If remote head is null, assume we have unpushed changes
+                if (remoteHead == null) return@withContext true
+                
+                // Check if local head is ahead of remote head
+                localHead != remoteHead
+            } catch (e: Exception) {
+                println("Error checking unpushed changes: ${e.message}")
+                false
+            }
+        }
+    }
+
     /** Reset operation state */
     fun reset() {
         uiScope.launch {

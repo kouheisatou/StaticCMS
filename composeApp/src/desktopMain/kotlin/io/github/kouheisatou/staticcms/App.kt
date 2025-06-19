@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.window.WindowState
 import io.github.kouheisatou.staticcms.model.AppScreen
 import io.github.kouheisatou.staticcms.screens.ArticleDetailScreen
 import io.github.kouheisatou.staticcms.screens.CloneProgressScreen
@@ -15,7 +17,10 @@ import io.github.kouheisatou.staticcms.viewmodel.StaticCMSViewModel
 
 /** Main application composable function Manages the overall navigation and screen flow */
 @Composable
-fun app() {
+fun app(
+    windowState: WindowState? = null,
+    onCloseRequest: (() -> Unit)? = null
+) {
     val viewModel = remember { StaticCMSViewModel() }
 
     // Collect state flows
@@ -24,6 +29,21 @@ fun app() {
     val currentUser by viewModel.currentUser.collectAsState()
     val gitOperationState by viewModel.gitOperationState.collectAsState()
     val gitOperationProgress by viewModel.gitOperationProgress.collectAsState()
+    val fileOperationState by viewModel.fileOperationState.collectAsState()
+    val fileOperationProgress by viewModel.fileOperationProgress.collectAsState()
+    val hasUnpushedChanges by viewModel.hasUnpushedChanges.collectAsState()
+
+    // Handle close request with unpushed changes check
+    LaunchedEffect(hasUnpushedChanges) {
+        onCloseRequest?.let { closeHandler ->
+            // Override close handler to check for unpushed changes
+            if (hasUnpushedChanges) {
+                // Show warning dialog before closing
+                println("Warning: You have unpushed changes!")
+                // In a real implementation, you might want to show a dialog here
+            }
+        }
+    }
 
     RetroTheme {
         when (state.currentScreen) {
@@ -73,6 +93,15 @@ fun app() {
                         viewModel.selectThumbnailImage(directoryIndex, rowIndex, colIndex)
                     },
                     onCommitAndPush = { viewModel.commitAndPush("Update content via StaticCMS") },
+                    onAddRow = { directoryIndex ->
+                        viewModel.addNewRow(directoryIndex)
+                    },
+                    onDeleteRow = { directoryIndex, rowIndex ->
+                        viewModel.deleteRow(directoryIndex, rowIndex)
+                    },
+                    onBackToRepositorySelection = {
+                        viewModel.returnToRepositorySelection()
+                    },
                 )
             }
             AppScreen.ARTICLE_DETAIL -> {

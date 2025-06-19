@@ -279,28 +279,173 @@ object FileOperations {
     }
 
     /**
-     * Thumbnailカラムの画像選択と処理を行う
+     * Thumbnailカラムの画像選択と処理を行う（非同期対応版）
      *
      * @param rowId 行のID
      * @param targetDir 保存先ディレクトリ
+     * @param onProgress プログレス更新コールバック
      * @return 保存されたファイル名（失敗時はnull）
      */
-    fun selectAndProcessThumbnailImage(rowId: String, targetDir: File): String? {
-        // ファイル選択ダイアログ表示
-        val selectedFile = selectImageFile() ?: return null
+    suspend fun selectAndProcessThumbnailImageAsync(
+        rowId: String, 
+        targetDir: File,
+        onProgress: suspend (Float, String) -> Unit = { _, _ -> }
+    ): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                onProgress(0.1f, "Opening file dialog...")
+                
+                // ファイル選択ダイアログ表示
+                val selectedFile = selectImageFile() ?: return@withContext null
+                
+                onProgress(0.3f, "Validating image format...")
+                
+                // 拡張子を取得
+                val extension = selectedFile.extension.lowercase()
+                if (extension !in listOf("jpg", "jpeg", "png", "gif", "bmp")) {
+                    println("Unsupported image format: $extension")
+                    return@withContext null
+                }
 
-        // 拡張子を取得
-        val extension = selectedFile.extension.lowercase()
-        if (extension !in listOf("jpg", "jpeg", "png", "gif", "bmp")) {
-            println("Unsupported image format: $extension")
-            return null
+                onProgress(0.5f, "Preparing image processing...")
+                
+                // ファイル名を id.拡張子 の形式で設定
+                val targetFileName = "$rowId.$extension"
+
+                onProgress(0.7f, "Processing and saving image...")
+                
+                // 画像処理と保存
+                val result = processAndSaveImageAsync(selectedFile, targetDir, targetFileName) { progress ->
+                    // Map image processing progress from 0.7 to 1.0
+                    val mappedProgress = 0.7f + (progress * 0.3f)
+                    runBlocking { onProgress(mappedProgress, "Processing image...") }
+                }
+                
+                onProgress(1.0f, "Image processing completed")
+                result
+            } catch (e: Exception) {
+                println("Error in async image selection: ${e.message}")
+                null
+            }
         }
+    }
 
-        // ファイル名を id.拡張子 の形式で設定
-        val targetFileName = "$rowId.$extension"
+    /**
+     * 画像をリサイズして圧縮し、指定されたファイル名で保存（非同期対応版）
+     *
+     * @param sourceFile 元画像ファイル
+     * @param targetDir 保存先ディレクトリ
+     * @param targetFileName 保存ファイル名（id + 拡張子）
+     * @param maxWidth 最大幅（デフォルト800px）
+     * @param quality 圧縮品質（0.0-1.0、デフォルト0.8）
+     * @param onProgress プログレス更新コールバック
+     * @return 保存されたファイル名（失敗時はnull）
+     */
+    suspend fun processAndSaveImageAsync(
+        sourceFile: File,
+        targetDir: File,
+        targetFileName: String,
+        maxWidth: Int = 800,
+        quality: Float = 0.8f,
+        onProgress: (Float) -> Unit = {}
+    ): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                onProgress(0.1f)
+                
+                // 保存先ディレクトリの作成
+                if (!targetDir.exists()) {
+                    targetDir.mkdirs()
+                }
 
-        // 画像処理と保存
-        return processAndSaveImage(selectedFile, targetDir, targetFileName)
+                onProgress(0.2f)
+                
+                // 元画像の読み込み
+                val originalImage =
+                    ImageIO.read(sourceFile) ?: throw Exception("Cannot read image file")
+
+                onProgress(0.4f)
+                
+                // リサイズ計算
+                val originalWidth = originalImage.width
+                val originalHeight = originalImage.height
+
+                val (newWidth, newHeight) =
+                    if (originalWidth > maxWidth) {
+                        val ratio = maxWidth.toFloat() / originalWidth
+                        Pair(maxWidth, (originalHeight * ratio).toInt())
+                    } else {
+                        Pair(originalWidth, originalHeight)
+                    }
+
+                onProgress(0.6f)
+                
+                // リサイズ処理
+                val resizedImage = BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB)
+                val graphics =
+                    resizedImage.createGraphics().apply {
+                        setRenderingHint(
+                            RenderingHints.KEY_INTERPOLATION,
+                            RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+                        setRenderingHint(
+                            RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+                        setRenderingHint(
+                            RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                    }
+
+                graphics.drawImage(
+                    originalImage.getScaledInstance(newWidth, newHeight, Image.SCALE_SMOOTH),
+                    0,
+                    0,
+                    null)
+                graphics.dispose()
+
+                onProgress(0.8f)
+                
+                // ファイル保存
+                val targetFile = File(targetDir, targetFileName)
+                val formatName = targetFileName.substringAfterLast(".").lowercase()
+
+                // JPEGの場合は品質設定付きで保存
+                if (formatName == "jpg" || formatName == "jpeg") {
+                    val writers = ImageIO.getImageWritersByFormatName("jpeg")
+                    if (writers.hasNext()) {
+                        val writer = writers.next()
+                        val writeParam =
+                            writer.defaultWriteParam.apply {
+                                compressionMode = javax.imageio.ImageWriteParam.MODE_EXPLICIT
+                                compressionQuality = quality
+                            }
+
+                        val output = javax.imageio.stream.FileImageOutputStream(targetFile)
+                        writer.output = output
+                        writer.write(null, javax.imageio.IIOImage(resizedImage, null, null), writeParam)
+                        writer.dispose()
+                        output.close()
+                    } else {
+                        ImageIO.write(resizedImage, "jpeg", targetFile)
+                    }
+                } else {
+                    ImageIO.write(resizedImage, formatName, targetFile)
+                }
+
+                onProgress(1.0f)
+                
+                println("Image processed and saved: ${targetFile.absolutePath}")
+                targetFileName
+            } catch (e: Exception) {
+                println("Error processing image: ${e.message}")
+                e.printStackTrace()
+                null
+            }
+        }
+    }
+
+    // 既存のselectAndProcessThumbnailImage関数は後方互換性のために残す
+    fun selectAndProcessThumbnailImage(rowId: String, targetDir: File): String? {
+        return runBlocking {
+            selectAndProcessThumbnailImageAsync(rowId, targetDir)
+        }
     }
 
     suspend fun simulateClone(

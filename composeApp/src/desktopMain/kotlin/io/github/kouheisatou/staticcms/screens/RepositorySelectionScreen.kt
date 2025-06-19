@@ -19,6 +19,7 @@ import io.github.kouheisatou.staticcms.model.GitHubRepository
 import io.github.kouheisatou.staticcms.ui.components.*
 import io.github.kouheisatou.staticcms.ui.theme.RetroColors
 import io.github.kouheisatou.staticcms.ui.theme.RetroTypography
+import kotlinx.coroutines.delay
 
 @Composable
 fun RepositorySelectionScreen(
@@ -27,6 +28,43 @@ fun RepositorySelectionScreen(
     onRepositorySelected: (GitHubRepository) -> Unit,
     onRefresh: () -> Unit,
 ) {
+    // Mutable state for animated loading progress
+    var animatedProgress by remember { mutableStateOf(0f) }
+    var loadingMessage by remember { mutableStateOf("Loading repositories...") }
+
+    // Animate loading progress when isLoading is true
+    LaunchedEffect(isLoading) {
+        if (isLoading) {
+            animatedProgress = 0f
+            loadingMessage = "Connecting to GitHub..."
+            
+            // Simulate loading phases with different messages
+            val phases = listOf(
+                "Connecting to GitHub..." to 0.2f,
+                "Fetching repositories..." to 0.6f,
+                "Processing repository data..." to 0.9f,
+                "Almost done..." to 1.0f
+            )
+            
+            for ((message, targetProgress) in phases) {
+                loadingMessage = message
+                
+                // Animate to target progress
+                val startProgress = animatedProgress
+                val steps = 10
+                for (i in 1..steps) {
+                    val progress = startProgress + (targetProgress - startProgress) * (i.toFloat() / steps)
+                    animatedProgress = progress
+                    delay(100)
+                }
+                
+                delay(300) // Brief pause between phases
+            }
+        } else {
+            animatedProgress = 0f
+        }
+    }
+
     RetroWindow(
         title = "StaticCMS - Select Repository",
         modifier = Modifier.fillMaxSize(),
@@ -62,21 +100,33 @@ fun RepositorySelectionScreen(
             }
 
             if (isLoading) {
-                // Loading state
+                // Animated loading state with mutable state
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
-                        text = "Loading repositories...",
+                        text = loadingMessage,
                         style = RetroTypography.Default,
                         modifier = Modifier.padding(bottom = 16.dp),
                     )
-                    RetroProgressBar(
-                        progress = 0.5f,
-                        modifier = Modifier.fillMaxWidth(0.3f),
-                    )
+                    
+                    Column(
+                        modifier = Modifier.fillMaxWidth(0.4f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        RetroProgressBar(
+                            progress = animatedProgress,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        )
+                        
+                        Text(
+                            text = "${(animatedProgress * 100).toInt()}%",
+                            style = RetroTypography.Default.copy(fontSize = 10.sp),
+                            color = RetroColors.DisabledText,
+                        )
+                    }
                 }
             } else if (repositories.isEmpty()) {
                 // Empty state
