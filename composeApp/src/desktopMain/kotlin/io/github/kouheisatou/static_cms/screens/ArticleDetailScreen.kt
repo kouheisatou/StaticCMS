@@ -42,18 +42,21 @@ fun ArticleDetailScreen(
         modifier = modifier.fillMaxSize()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Toolbar
+            // Toolbar - 固定の高さを設定
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(40.dp) // ツールバーの高さを固定
                     .background(RetroColors.ButtonFace)
-                    .padding(4.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 RetroTextButton(
                     text = "< Back",
                     onClick = onBack,
-                    modifier = Modifier.padding(end = 8.dp)
+                    modifier = Modifier
+                        .padding(end = 8.dp)
+                        .width(80.dp) // ボタンの幅を制限
                 )
                 
                 Spacer(modifier = Modifier.weight(1f))
@@ -64,15 +67,18 @@ fun ArticleDetailScreen(
                         onContentChange(markdownText)
                         onSave()
                     },
-                    modifier = Modifier.padding(start = 8.dp)
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .width(80.dp) // ボタンの幅を制限
                 )
             }
             
-            // Split view: Editor | Preview
+            // Split view: Editor | Preview - 残りの領域をすべて使用
             Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(4.dp)
+                    .fillMaxWidth()
+                    .weight(1f) // 残りの縦領域をすべて使用
+                    .padding(8.dp)
             ) {
                 // Left side: Markdown Editor
                 Column(

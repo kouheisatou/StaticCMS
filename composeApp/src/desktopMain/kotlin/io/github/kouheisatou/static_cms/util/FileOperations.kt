@@ -106,6 +106,10 @@ object FileOperations {
         }
     }
 
+    fun writeCsvFile(directory: ContentDirectory) {
+        writeCsvData(directory.csvFile, directory.data)
+    }
+
     fun readMarkdownFile(articleDir: File): ArticleContent? {
         val markdownFile = File(articleDir, "article.md")
         val mediaDir = File(articleDir, "media")

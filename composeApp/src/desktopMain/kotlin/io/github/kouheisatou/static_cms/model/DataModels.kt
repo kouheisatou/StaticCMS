@@ -19,6 +19,61 @@ data class CsvRow(
     val additionalFields: Map<String, String> = emptyMap()
 )
 
+@Serializable
+data class GitHubUser(
+    val login: String,
+    val id: Long,
+    val email: String? = null,
+    val name: String? = null,
+    val avatar_url: String? = null
+)
+
+@Serializable
+data class GitHubRepository(
+    val id: Long,
+    val name: String,
+    val full_name: String,
+    val permissions: GitHubPermissions? = null,
+    val clone_url: String? = null,
+    val ssh_url: String? = null,
+    val html_url: String? = null,
+    val description: String? = null,
+    val private: Boolean = false,
+    val updated_at: String? = null,
+    val language: String? = null,
+    val stargazers_count: Int = 0,
+    val forks_count: Int = 0
+)
+
+@Serializable
+data class GitHubPermissions(
+    val admin: Boolean,
+    val push: Boolean,
+    val pull: Boolean
+)
+
+@Serializable
+data class GitHubCommit(
+    val sha: String,
+    val message: String
+)
+
+@Serializable
+data class GitHubOAuthTokenResponse(
+    val access_token: String,
+    val token_type: String,
+    val scope: String? = null
+)
+
+sealed class AuthState {
+    object Idle : AuthState()
+    object Starting : AuthState()
+    object WaitingForUser : AuthState()
+    object Processing : AuthState()
+    data class Success(val user: GitHubUser) : AuthState()
+    data class Error(val message: String) : AuthState()
+}
+
 data class ContentDirectory(
     val name: String,
     val path: String,
@@ -38,6 +93,9 @@ data class AppState(
     val currentScreen: AppScreen = AppScreen.GITHUB_AUTH,
     val githubToken: String = "",
     val repositoryUrl: String = "",
+    val selectedRepository: GitHubRepository? = null,
+    val availableRepositories: List<GitHubRepository> = emptyList(),
+    val isLoadingRepositories: Boolean = false,
     val cloneProgress: Float = 0f,
     val isCloning: Boolean = false,
     val contentDirectories: List<ContentDirectory> = emptyList(),

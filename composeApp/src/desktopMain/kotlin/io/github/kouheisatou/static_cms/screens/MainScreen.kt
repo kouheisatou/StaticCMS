@@ -22,6 +22,7 @@ fun MainScreen(
     selectedDirectoryIndex: Int,
     onDirectorySelected: (Int) -> Unit,
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit,
+    onCellEdit: (directoryIndex: Int, rowIndex: Int, colIndex: Int, newValue: String) -> Unit,
     onCommitAndPush: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -91,7 +92,9 @@ fun MainScreen(
                 if (selectedDirectory != null) {
                     DirectoryContent(
                         directory = selectedDirectory,
+                        directoryIndex = selectedDirectoryIndex,
                         onCellClick = onCellClick,
+                        onCellEdit = onCellEdit,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -103,7 +106,9 @@ fun MainScreen(
 @Composable
 private fun DirectoryContent(
     directory: ContentDirectory,
+    directoryIndex: Int,
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit,
+    onCellEdit: (directoryIndex: Int, rowIndex: Int, colIndex: Int, newValue: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -169,14 +174,25 @@ private fun DirectoryContent(
                     .verticalScroll(rememberScrollState())
                     .horizontalScroll(rememberScrollState())
             ) {
-                RetroTable(
+                RetroEditableTable(
                     headers = headers,
                     rows = rows,
                     onCellClick = { rowIndex, colIndex ->
-                        // Only allow clicking on ID column for article types to open detail view
-                        if (directory.type == DirectoryType.ARTICLE && colIndex == 0) {
+                        println("DEBUG: Cell clicked - row $rowIndex, col $colIndex")
+                        println("DEBUG: Directory type: ${directory.type}")
+                        println("DEBUG: Is ID column: ${colIndex == 0}")
+                        
+                        // Allow clicking on ID column for article types to open detail view
+                        if (colIndex == 0 && directory.type == DirectoryType.ARTICLE) {
+                            println("DEBUG: Opening article detail for row $rowIndex")
                             onCellClick(rowIndex, colIndex)
+                        } else {
+                            println("DEBUG: Click ignored - not an article ID column")
                         }
+                    },
+                    onCellEdit = { rowIndex, colIndex, newValue ->
+                        println("DEBUG: Cell edited - row $rowIndex, col $colIndex, value: '$newValue'")
+                        onCellEdit(directoryIndex, rowIndex, colIndex, newValue)
                     },
                     modifier = Modifier.wrapContentSize()
                 )
@@ -198,7 +214,14 @@ private fun DirectoryContent(
         // Instructions
         if (directory.type == DirectoryType.ARTICLE && directory.data.isNotEmpty()) {
             Text(
-                text = "Click on an ID to edit the article details",
+                text = "Click on an ID to edit the article details | Click on other cells to edit (auto-saved)",
+                style = RetroTypography.Default.copy(fontSize = 9.sp),
+                color = RetroColors.DisabledText,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        } else if (directory.data.isNotEmpty()) {
+            Text(
+                text = "Click on cells to edit (auto-saved)",
                 style = RetroTypography.Default.copy(fontSize = 9.sp),
                 color = RetroColors.DisabledText,
                 modifier = Modifier.padding(top = 8.dp)

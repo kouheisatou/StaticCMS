@@ -1,8 +1,9 @@
 package io.github.kouheisatou.static_cms.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -10,19 +11,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.kouheisatou.static_cms.model.AuthState
+import io.github.kouheisatou.static_cms.model.GitHubUser
 import io.github.kouheisatou.static_cms.ui.components.*
-import io.github.kouheisatou.static_cms.ui.theme.RetroTypography
 import io.github.kouheisatou.static_cms.ui.theme.RetroColors
-import androidx.compose.material3.Text
-import io.github.kouheisatou.static_cms.util.GitHubApiClient
+import io.github.kouheisatou.static_cms.ui.theme.RetroTypography
+
 
 @Composable
 fun GitHubAuthScreen(
     githubToken: String,
     onGitHubTokenChange: (String) -> Unit,
     onAuthenticateClick: (String) -> Unit,
-    authState: GitHubApiClient.AuthState,
-    currentUser: io.github.kouheisatou.static_cms.util.GitHubUser?,
+    onBrowserAuthClick: () -> Unit,
+    authState: AuthState,
+    currentUser: GitHubUser?,
     onContinue: () -> Unit
 ) {
     RetroWindow(
@@ -32,228 +35,210 @@ fun GitHubAuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             // Title
             Text(
-                text = "GitHub Authentication Required",
-                style = RetroTypography.Default.copy(fontSize = 16.sp),
+                text = "GitHub Authentication",
+                style = RetroTypography.Default.copy(fontSize = 18.sp),
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            
+            Text(
+                text = "Connect your GitHub account to manage repositories",
+                style = RetroTypography.Default.copy(fontSize = 12.sp),
+                color = RetroColors.DisabledText,
                 modifier = Modifier.padding(bottom = 32.dp)
             )
             
-            when (authState) {
-                is GitHubApiClient.AuthState.NotAuthenticated -> {
-                    GitHubTokenInput(
-                        token = githubToken,
-                        onTokenChange = onGitHubTokenChange,
-                        onAuthenticate = onAuthenticateClick
-                    )
-                }
-                is GitHubApiClient.AuthState.Authenticating -> {
-                    AuthenticatingContent()
-                }
-                is GitHubApiClient.AuthState.Authenticated -> {
-                    AuthenticatedContent(
-                        user = authState.user,
-                        onContinue = onContinue
-                    )
-                }
-                is GitHubApiClient.AuthState.Error -> {
-                    ErrorContent(
-                        error = authState.message,
-                        token = githubToken,
-                        onTokenChange = onGitHubTokenChange,
-                        onRetry = onAuthenticateClick
-                    )
-                }
+            // Authentication content - Browser OAuth only
+            Column(
+                modifier = Modifier.fillMaxWidth(0.5f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                BrowserAuthSection(
+                    authState = authState,
+                    currentUser = currentUser,
+                    onBrowserAuthClick = onBrowserAuthClick,
+                    onContinue = onContinue
+                )
             }
         }
     }
 }
 
 @Composable
-private fun GitHubTokenInput(
-    token: String,
-    onTokenChange: (String) -> Unit,
-    onAuthenticate: (String) -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(0.6f),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "GitHub Personal Access Token:",
-            style = RetroTypography.Default,
-            modifier = Modifier
-                .align(Alignment.Start)
-                .padding(bottom = 8.dp)
-        )
-        
-        RetroPasswordField(
-            value = token,
-            onValueChange = onTokenChange,
-            placeholder = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
-        )
-        
-        RetroTextButton(
-            text = "Authenticate",
-            onClick = { onAuthenticate(token) },
-            enabled = token.isNotBlank(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .padding(bottom = 16.dp)
-        )
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Instructions
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.Start
-        ) {
-            Text(
-                text = "How to create a Personal Access Token:",
-                style = RetroTypography.Default.copy(fontSize = 12.sp),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Text(
-                text = "1. Go to GitHub Settings > Developer settings > Personal access tokens",
-                style = RetroTypography.Default.copy(
-                    color = RetroColors.DisabledText,
-                    fontSize = 10.sp
-                ),
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            Text(
-                text = "2. Generate new token (classic)",
-                style = RetroTypography.Default.copy(
-                    color = RetroColors.DisabledText,
-                    fontSize = 10.sp
-                ),
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            Text(
-                text = "3. Select 'repo' scope for full repository access",
-                style = RetroTypography.Default.copy(
-                    color = RetroColors.DisabledText,
-                    fontSize = 10.sp
-                ),
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            Text(
-                text = "4. Copy and paste the token here",
-                style = RetroTypography.Default.copy(
-                    color = RetroColors.DisabledText,
-                    fontSize = 10.sp
-                )
-            )
-        }
-    }
-}
-
-@Composable
-private fun AuthenticatingContent() {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        RetroProgressBar(
-            progress = 0.5f,
-            modifier = Modifier
-                .width(200.dp)
-                .padding(bottom = 16.dp)
-        )
-        Text(
-            text = "Authenticating with GitHub...",
-            style = RetroTypography.Default,
-            color = RetroColors.WindowText
-        )
-    }
-}
-
-@Composable
-private fun AuthenticatedContent(
-    user: io.github.kouheisatou.static_cms.util.GitHubUser,
+private fun BrowserAuthSection(
+    authState: AuthState,
+    currentUser: GitHubUser?,
+    onBrowserAuthClick: () -> Unit,
     onContinue: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "✓ Authentication Successful",
-            style = RetroTypography.Default.copy(fontSize = 14.sp),
-            color = Color(0xFF008000),
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
-        Text(
-            text = "Logged in as: ${user.login}",
-            style = RetroTypography.Default,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        
-        user.name?.let { name ->
-            Text(
-                text = "Name: $name",
-                style = RetroTypography.Default,
-                color = RetroColors.DisabledText,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+        when (authState) {
+            is AuthState.Idle -> {
+                Text(
+                    text = "🔒 Secure OAuth Authentication",
+                    style = RetroTypography.Default.copy(fontSize = 14.sp),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                Text(
+                    text = "Click the button below to authenticate with GitHub in your browser. This will open a new browser window for secure login.",
+                    style = RetroTypography.Default.copy(fontSize = 10.sp),
+                    color = RetroColors.DisabledText,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+                
+                RetroTextButton(
+                    text = "🌐 Connect with GitHub",
+                    onClick = onBrowserAuthClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                )
+            }
+            
+            is AuthState.Starting -> {
+                Text(
+                    text = "🔄 Initializing authentication...",
+                    style = RetroTypography.Default,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                RetroProgressBar(
+                    progress = 0.3f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            is AuthState.WaitingForUser -> {
+                Text(
+                    text = "🌐 Browser Authentication",
+                    style = RetroTypography.Default.copy(fontSize = 14.sp),
+                    color = RetroColors.TitleBarActive,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                Text(
+                    text = "Please complete the authentication in your browser window.",
+                    style = RetroTypography.Default.copy(fontSize = 10.sp),
+                    color = RetroColors.DisabledText,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                Text(
+                    text = "If the browser didn't open automatically, check your browser for the GitHub login page.",
+                    style = RetroTypography.Default.copy(fontSize = 9.sp),
+                    color = RetroColors.DisabledText,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+                
+                RetroProgressBar(
+                    progress = 0.6f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            is AuthState.Processing -> {
+                Text(
+                    text = "🔄 Processing authentication...",
+                    style = RetroTypography.Default,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                Text(
+                    text = "Verifying credentials and setting up access...",
+                    style = RetroTypography.Default.copy(fontSize = 10.sp),
+                    color = RetroColors.DisabledText,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                RetroProgressBar(
+                    progress = 0.9f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            is AuthState.Success -> {
+                currentUser?.let { user ->
+                    Text(
+                        text = "✅ Authentication Successful!",
+                        style = RetroTypography.Default.copy(fontSize = 14.sp),
+                        color = RetroColors.TitleBarActive,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    
+                    Text(
+                        text = "Welcome, ${user.login}!",
+                        style = RetroTypography.Default.copy(fontSize = 12.sp),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    user.name?.let { name ->
+                        Text(
+                            text = name,
+                            style = RetroTypography.Default.copy(fontSize = 10.sp),
+                            color = RetroColors.DisabledText,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                    }
+                    
+                    Text(
+                        text = "🌐 Browser window will close automatically...",
+                        style = RetroTypography.Default.copy(fontSize = 10.sp),
+                        color = RetroColors.DisabledText,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    Text(
+                        text = "Proceeding to repository selection in a moment...",
+                        style = RetroTypography.Default.copy(fontSize = 10.sp),
+                        color = RetroColors.DisabledText,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    RetroProgressBar(
+                        progress = 1.0f,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+            
+            is AuthState.Error -> {
+                Text(
+                    text = "❌ Authentication Failed",
+                    style = RetroTypography.Default.copy(fontSize = 14.sp),
+                    color = RetroColors.DisabledText,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                Text(
+                    text = authState.message,
+                    style = RetroTypography.Default.copy(fontSize = 10.sp),
+                    color = RetroColors.DisabledText,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+                
+                RetroTextButton(
+                    text = "🔄 Try Again",
+                    onClick = onBrowserAuthClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                )
+            }
         }
-        
-        user.email?.let { email ->
-            Text(
-                text = "Email: $email",
-                style = RetroTypography.Default,
-                color = RetroColors.DisabledText,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-        }
-        
-        RetroTextButton(
-            text = "Continue to Repository",
-            onClick = onContinue,
-            modifier = Modifier
-                .width(200.dp)
-                .height(40.dp)
-        )
-    }
-}
-
-@Composable
-private fun ErrorContent(
-    error: String,
-    token: String,
-    onTokenChange: (String) -> Unit,
-    onRetry: (String) -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "⚠ Authentication Failed",
-            style = RetroTypography.Default.copy(fontSize = 14.sp),
-            color = Color(0xFFCC0000),
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        
-        Text(
-            text = error,
-            style = RetroTypography.Default,
-            color = RetroColors.DisabledText,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
-        GitHubTokenInput(
-            token = token,
-            onTokenChange = onTokenChange,
-            onAuthenticate = onRetry
-        )
     }
 }
 

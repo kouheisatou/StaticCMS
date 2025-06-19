@@ -34,13 +34,20 @@ class GitOperations {
             _operationState.value = OperationState.Cloning(0f)
             _operationProgress.value = 0f
             
+            println("DEBUG: Starting clone to $destinationPath")
+            
             val destinationDir = File(destinationPath)
             if (destinationDir.exists()) {
+                println("DEBUG: Destination directory exists, deleting...")
                 destinationDir.deleteRecursively()
             }
             destinationDir.mkdirs()
+            println("DEBUG: Created destination directory")
 
             val credentialsProvider = UsernamePasswordCredentialsProvider(username, token)
+            
+            var totalWork = 0
+            var currentWork = 0
             
             // プログレス監視付きクローン
             val git = Git.cloneRepository()
@@ -48,23 +55,59 @@ class GitOperations {
                 .setDirectory(destinationDir)
                 .setCredentialsProvider(credentialsProvider)
                 .setProgressMonitor(object : org.eclipse.jgit.lib.ProgressMonitor {
+                    private var taskTotalWork = 0
+                    private var taskCurrentWork = 0
+                    
                     override fun start(totalTasks: Int) {
+                        println("DEBUG: Git clone started with $totalTasks tasks")
                         _operationProgress.value = 0.1f
                         _operationState.value = OperationState.Cloning(0.1f)
                     }
                     
                     override fun beginTask(title: String?, totalWork: Int) {
-                        println("Git Operation: $title")
+                        println("DEBUG: Git task started: $title (totalWork: $totalWork)")
+                        taskTotalWork = totalWork
+                        taskCurrentWork = 0
+                        if (totalWork > 0) {
+                            val baseProgress = when {
+                                title?.contains("Receiving objects") == true -> 0.1f
+                                title?.contains("Resolving deltas") == true -> 0.6f
+                                title?.contains("Checking out files") == true -> 0.8f
+                                else -> 0.1f
+                            }
+                            _operationProgress.value = baseProgress
+                            _operationState.value = OperationState.Cloning(baseProgress)
+                        }
                     }
                     
                     override fun update(completed: Int) {
-                        val progress = (completed.toFloat() / 100f).coerceIn(0f, 0.9f)
-                        _operationProgress.value = progress
-                        _operationState.value = OperationState.Cloning(progress)
+                        taskCurrentWork += completed
+                        if (taskTotalWork > 0) {
+                            val taskProgress = (taskCurrentWork.toFloat() / taskTotalWork.toFloat()).coerceIn(0f, 1f)
+                            val overallProgress = when {
+                                taskCurrentWork <= taskTotalWork * 0.5 -> 0.1f + (taskProgress * 0.5f) // 10-60%
+                                taskCurrentWork <= taskTotalWork * 0.8 -> 0.6f + (taskProgress * 0.2f) // 60-80%
+                                else -> 0.8f + (taskProgress * 0.15f) // 80-95%
+                            }
+                            _operationProgress.value = overallProgress.coerceIn(0f, 0.95f)
+                            _operationState.value = OperationState.Cloning(overallProgress)
+                            println("DEBUG: Git progress: $taskCurrentWork/$taskTotalWork = ${overallProgress * 100}%")
+                        } else {
+                            // totalWork不明の場合は段階的に進捗を更新
+                            val currentProgress = _operationProgress.value
+                            val newProgress = (currentProgress + 0.01f).coerceIn(0f, 0.9f)
+                            _operationProgress.value = newProgress
+                            _operationState.value = OperationState.Cloning(newProgress)
+                            println("DEBUG: Git progress (incremental): ${newProgress * 100}%")
+                        }
                     }
                     
                     override fun endTask() {
-                        // タスク完了
+                        println("DEBUG: Git task ended")
+                        val currentProgress = _operationProgress.value
+                        val newProgress = (currentProgress + 0.1f).coerceIn(0f, 0.95f)
+                        _operationProgress.value = newProgress
+                        _operationState.value = OperationState.Cloning(newProgress)
                     }
                     
                     override fun isCancelled(): Boolean = false
@@ -75,11 +118,14 @@ class GitOperations {
                 })
                 .call()
 
+            println("DEBUG: Git clone completed successfully")
             _operationProgress.value = 1f
             _operationState.value = OperationState.Success("Repository cloned successfully")
             
             Result.success(git)
         } catch (e: Exception) {
+            println("ERROR: Git clone failed: ${e.message}")
+            e.printStackTrace()
             _operationState.value = OperationState.Error("Clone failed: ${e.message}")
             Result.failure(e)
         }

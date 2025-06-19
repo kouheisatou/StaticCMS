@@ -18,35 +18,30 @@ fun App() {
         when (state.currentScreen) {
             AppScreen.GITHUB_AUTH -> {
                 GitHubAuthScreen(
-                    githubToken = state.githubToken,
-                    onGitHubTokenChange = viewModel::updateGitHubToken,
-                    onAuthenticateClick = { token ->
-                        viewModel.authenticateWithGitHub(token)
+                    githubToken = "",
+                    onGitHubTokenChange = { },
+                    onAuthenticateClick = { },
+                    onBrowserAuthClick = {
+                        viewModel.authenticateWithBrowser()
                     },
                     authState = githubAuthState,
                     currentUser = currentUser,
-                    onContinue = viewModel::proceedToRepositoryInput
+                    onContinue = { }
                 )
             }
             
             AppScreen.REPOSITORY_INPUT -> {
-                RepositoryInputScreen(
-                    repositoryUrl = state.repositoryUrl,
-                    onRepositoryUrlChange = viewModel::updateRepositoryUrl,
-                    onCloneClick = {
-                        println("DEBUG: onCloneClick called in App.kt")
-                        println("DEBUG: Current state: ${state.currentScreen}")
-                        println("DEBUG: Repository URL: '${state.repositoryUrl}'")
-                        println("DEBUG: GitHub token available: ${state.githubToken.isNotEmpty()}")
-                        viewModel.startClone()
-                        println("DEBUG: startClone() call completed")
-                    }
+                RepositorySelectionScreen(
+                    repositories = state.availableRepositories,
+                    isLoading = state.isLoadingRepositories,
+                    onRepositorySelected = viewModel::selectRepository,
+                    onRefresh = viewModel::loadRepositories
                 )
             }
             
             AppScreen.CLONE_PROGRESS -> {
                 CloneProgressScreen(
-                    repositoryUrl = state.repositoryUrl,
+                    repositoryUrl = state.selectedRepository?.full_name ?: state.repositoryUrl,
                     progress = state.cloneProgress
                 )
             }
@@ -57,6 +52,9 @@ fun App() {
                     selectedDirectoryIndex = state.selectedDirectoryIndex,
                     onDirectorySelected = viewModel::selectDirectory,
                     onCellClick = viewModel::openArticle,
+                    onCellEdit = { directoryIndex, rowIndex, colIndex, newValue ->
+                        viewModel.updateCellValue(directoryIndex, rowIndex, colIndex, newValue)
+                    },
                     onCommitAndPush = { 
                         viewModel.commitAndPush("Update content via StaticCMS")
                     }
