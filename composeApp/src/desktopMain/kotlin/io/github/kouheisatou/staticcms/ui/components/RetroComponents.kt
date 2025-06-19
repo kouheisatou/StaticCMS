@@ -11,8 +11,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -22,6 +26,78 @@ import androidx.compose.ui.unit.dp
 import io.github.kouheisatou.staticcms.ui.theme.RetroColors
 import io.github.kouheisatou.staticcms.ui.theme.RetroTypography
 
+// Constants for component styling
+private object ComponentConstants {
+    val BORDER_STROKE_WIDTH = 2.dp
+    val DEFAULT_PADDING = 4.dp
+    val TITLE_BAR_HEIGHT = 24.dp
+    val TAB_CORNER_RADIUS = 4.dp
+}
+
+// Helper functions for drawing borders
+private fun DrawScope.drawInsetBorder(
+    strokeWidth: Float,
+    topLeft: Offset,
+    topRight: Offset,
+    bottomLeft: Offset,
+    bottomRight: Offset,
+) {
+    // Pressed/inset look
+    drawLine(RetroColors.ButtonDarkShadow, topLeft, topRight, strokeWidth)
+    drawLine(RetroColors.ButtonDarkShadow, topLeft, bottomLeft, strokeWidth)
+    drawLine(
+        RetroColors.ButtonShadow,
+        Offset(strokeWidth, strokeWidth),
+        Offset(size.width - strokeWidth, strokeWidth),
+        strokeWidth,
+    )
+    drawLine(
+        RetroColors.ButtonShadow,
+        Offset(strokeWidth, strokeWidth),
+        Offset(strokeWidth, size.height - strokeWidth),
+        strokeWidth,
+    )
+}
+
+private fun DrawScope.drawRaisedBorder(
+    strokeWidth: Float,
+    topLeft: Offset,
+    topRight: Offset,
+    bottomLeft: Offset,
+    bottomRight: Offset,
+) {
+    // Raised look
+    drawLine(RetroColors.ButtonLight, topLeft, topRight, strokeWidth)
+    drawLine(RetroColors.ButtonLight, topLeft, bottomLeft, strokeWidth)
+    drawLine(
+        RetroColors.ButtonHighlight,
+        Offset(strokeWidth, strokeWidth),
+        Offset(size.width - strokeWidth, strokeWidth),
+        strokeWidth,
+    )
+    drawLine(
+        RetroColors.ButtonHighlight,
+        Offset(strokeWidth, strokeWidth),
+        Offset(strokeWidth, size.height - strokeWidth),
+        strokeWidth,
+    )
+    drawLine(
+        RetroColors.ButtonShadow,
+        Offset(size.width - strokeWidth, strokeWidth),
+        bottomRight,
+        strokeWidth,
+    )
+    drawLine(
+        RetroColors.ButtonShadow,
+        Offset(strokeWidth, size.height - strokeWidth),
+        bottomRight,
+        strokeWidth,
+    )
+    drawLine(RetroColors.ButtonDarkShadow, topRight, bottomRight, strokeWidth)
+    drawLine(RetroColors.ButtonDarkShadow, bottomLeft, bottomRight, strokeWidth)
+}
+
+/** 3D border effect component for retro Windows 95 style */
 @Composable
 fun Retro3DBorder(
     modifier: Modifier = Modifier,
@@ -32,66 +108,25 @@ fun Retro3DBorder(
         modifier =
             modifier
                 .drawBehind {
-                    val strokeWidth = 2.dp.toPx()
+                    val strokeWidth = ComponentConstants.BORDER_STROKE_WIDTH.toPx()
                     val topLeft = Offset(0f, 0f)
                     val topRight = Offset(size.width, 0f)
                     val bottomLeft = Offset(0f, size.height)
                     val bottomRight = Offset(size.width, size.height)
 
                     if (pressed) {
-                        // Pressed/inset look
-                        drawLine(RetroColors.ButtonDarkShadow, topLeft, topRight, strokeWidth)
-                        drawLine(RetroColors.ButtonDarkShadow, topLeft, bottomLeft, strokeWidth)
-                        drawLine(
-                            RetroColors.ButtonShadow,
-                            Offset(strokeWidth, strokeWidth),
-                            Offset(size.width - strokeWidth, strokeWidth),
-                            strokeWidth,
-                        )
-                        drawLine(
-                            RetroColors.ButtonShadow,
-                            Offset(strokeWidth, strokeWidth),
-                            Offset(strokeWidth, size.height - strokeWidth),
-                            strokeWidth,
-                        )
+                        drawInsetBorder(strokeWidth, topLeft, topRight, bottomLeft, bottomRight)
                     } else {
-                        // Raised look
-                        drawLine(RetroColors.ButtonLight, topLeft, topRight, strokeWidth)
-                        drawLine(RetroColors.ButtonLight, topLeft, bottomLeft, strokeWidth)
-                        drawLine(
-                            RetroColors.ButtonHighlight,
-                            Offset(strokeWidth, strokeWidth),
-                            Offset(size.width - strokeWidth, strokeWidth),
-                            strokeWidth,
-                        )
-                        drawLine(
-                            RetroColors.ButtonHighlight,
-                            Offset(strokeWidth, strokeWidth),
-                            Offset(strokeWidth, size.height - strokeWidth),
-                            strokeWidth,
-                        )
-                        drawLine(
-                            RetroColors.ButtonShadow,
-                            Offset(size.width - strokeWidth, strokeWidth),
-                            bottomRight,
-                            strokeWidth,
-                        )
-                        drawLine(
-                            RetroColors.ButtonShadow,
-                            Offset(strokeWidth, size.height - strokeWidth),
-                            bottomRight,
-                            strokeWidth,
-                        )
-                        drawLine(RetroColors.ButtonDarkShadow, topRight, bottomRight, strokeWidth)
-                        drawLine(RetroColors.ButtonDarkShadow, bottomLeft, bottomRight, strokeWidth)
+                        drawRaisedBorder(strokeWidth, topLeft, topRight, bottomLeft, bottomRight)
                     }
                 }
                 .background(RetroColors.ButtonFace)
-                .padding(4.dp),
+                .padding(ComponentConstants.DEFAULT_PADDING),
         content = content,
     )
 }
 
+/** Generic retro button component with 3D effect */
 @Composable
 fun RetroButton(
     onClick: () -> Unit,
@@ -112,10 +147,10 @@ fun RetroButton(
                             pressed = false
                             if (released) {
                                 onClick()
-                            } else {}
+                            }
                         },
                     )
-                } else {}
+                }
             },
         pressed = pressed && enabled,
     ) {
@@ -131,6 +166,7 @@ fun RetroButton(
     }
 }
 
+/** Text button with retro styling */
 @Composable
 fun RetroTextButton(
     text: String,
@@ -139,7 +175,7 @@ fun RetroTextButton(
     enabled: Boolean = true,
 ) {
     RetroButton(
-        onClick = { onClick() },
+        onClick = onClick,
         modifier = modifier,
         enabled = enabled,
     ) {
@@ -152,6 +188,7 @@ fun RetroTextButton(
     }
 }
 
+/** Text input field with retro styling */
 @Composable
 fun RetroTextField(
     value: String,
@@ -164,8 +201,8 @@ fun RetroTextField(
         modifier =
             modifier
                 .background(Color.White)
-                .border(2.dp, RetroColors.ButtonDarkShadow)
-                .padding(4.dp),
+                .border(ComponentConstants.BORDER_STROKE_WIDTH, RetroColors.ButtonDarkShadow)
+                .padding(ComponentConstants.DEFAULT_PADDING),
     ) {
         BasicTextField(
             value = value,
@@ -183,6 +220,7 @@ fun RetroTextField(
     }
 }
 
+/** Password input field with retro styling */
 @Composable
 fun RetroPasswordField(
     value: String,
@@ -195,8 +233,8 @@ fun RetroPasswordField(
         modifier =
             modifier
                 .background(Color.White)
-                .border(2.dp, RetroColors.ButtonDarkShadow)
-                .padding(4.dp),
+                .border(ComponentConstants.BORDER_STROKE_WIDTH, RetroColors.ButtonDarkShadow)
+                .padding(ComponentConstants.DEFAULT_PADDING),
     ) {
         BasicTextField(
             value = value,
@@ -205,6 +243,58 @@ fun RetroPasswordField(
             singleLine = singleLine,
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
+        )
+        if (value.isEmpty() && placeholder.isNotEmpty()) {
+            Text(
+                text = placeholder,
+                style = RetroTypography.Default.copy(color = RetroColors.DisabledText),
+            )
+        }
+    }
+}
+
+@Composable
+fun RetroEditableTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onEditComplete: () -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    Box(
+        modifier =
+            modifier
+                .background(Color.White)
+                .border(2.dp, RetroColors.ButtonDarkShadow)
+                .padding(4.dp),
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = RetroTypography.Default.copy(color = Color.Black),
+            singleLine = true,
+            modifier =
+                Modifier.fillMaxWidth().focusRequester(focusRequester).onKeyEvent { keyEvent ->
+                    when (keyEvent.key) {
+                        Key.Enter -> {
+                            if (keyEvent.type == KeyEventType.KeyUp) {
+                                onEditComplete()
+                            }
+                            true
+                        }
+                        Key.Escape -> {
+                            if (keyEvent.type == KeyEventType.KeyUp) {
+                                onEditComplete()
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                },
         )
         if (value.isEmpty() && placeholder.isNotEmpty()) {
             Text(
@@ -425,10 +515,19 @@ fun RetroEditableTable(
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit = { _, _ -> },
     onCellEdit: (rowIndex: Int, colIndex: Int, newValue: String) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
+    resetEditingTrigger: Int = 0,
+    isEditable: Boolean = true,
 ) {
     val minColumnWidth = 120.dp
     val columnWidths = headers.map { minColumnWidth }
     var editingCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    // Reset editing mode when external trigger changes
+    LaunchedEffect(resetEditingTrigger) {
+        if (resetEditingTrigger > 0) {
+            editingCell = null
+        }
+    }
 
     Column(
         modifier = modifier.background(Color.White).border(1.dp, RetroColors.ButtonDarkShadow),
@@ -462,7 +561,7 @@ fun RetroEditableTable(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 row.forEachIndexed { colIndex, cell ->
-                    val isEditing = editingCell == Pair(rowIndex, colIndex)
+                    val isCurrentlyEditing = editingCell == Pair(rowIndex, colIndex)
                     val isIdColumn = colIndex == 0
                     var cellPressed by remember { mutableStateOf(false) }
                     var textValue by remember(cell) { mutableStateOf(cell) }
@@ -470,17 +569,13 @@ fun RetroEditableTable(
                     Box(
                         modifier =
                             Modifier.width(columnWidths[colIndex])
-                                .height(36.dp) // 固定の高さを設定してがたつきを防ぐ
+                                .height(36.dp)
                                 .border(1.dp, RetroColors.ButtonShadow)
                                 .background(
                                     when {
-                                        isEditing -> RetroColors.ButtonFace
+                                        isCurrentlyEditing -> RetroColors.ButtonFace
                                         cellPressed -> RetroColors.ButtonFace
-                                        isIdColumn ->
-                                            Color(
-                                                0xFFE0E0E0,
-                                            ) // Slightly different background for ID
-                                        // column
+                                        isIdColumn -> Color(0xFFE0E0E0)
                                         else -> Color.White
                                     },
                                 )
@@ -491,11 +586,13 @@ fun RetroEditableTable(
                                             val released = tryAwaitRelease()
                                             cellPressed = false
                                             if (released) {
-                                                if (isIdColumn) {
-                                                    onCellClick(rowIndex, colIndex)
-                                                } else {
-                                                    editingCell = Pair(rowIndex, colIndex)
-                                                    textValue = cell
+                                                when {
+                                                    isIdColumn -> onCellClick(rowIndex, colIndex)
+                                                    isEditable && !isIdColumn -> {
+                                                        editingCell = Pair(rowIndex, colIndex)
+                                                        textValue = cell
+                                                    }
+                                                    !isEditable -> onCellClick(rowIndex, colIndex)
                                                 }
                                             }
                                         },
@@ -504,34 +601,16 @@ fun RetroEditableTable(
                                 .padding(4.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        if (isEditing && !isIdColumn) {
-                            // Edit mode with real-time saving
-                            RetroTextField(
+                        if (isCurrentlyEditing && isEditable && !isIdColumn) {
+                            // Edit mode
+                            RetroEditableTextField(
                                 value = textValue,
                                 onValueChange = { newValue ->
                                     textValue = newValue
-                                    // Real-time save on every change
                                     onCellEdit(rowIndex, colIndex, newValue)
                                 },
-                                singleLine = true,
-                                modifier =
-                                    Modifier.fillMaxWidth()
-                                        .height(28.dp) // 編集フィールドの高さを固定
-                                        .pointerInput(Unit) {
-                                            detectTapGestures(
-                                                onPress = {
-                                                    // Keep focus on text field
-                                                },
-                                            )
-                                        },
-                            )
-
-                            // Handle keyboard events to exit edit mode
-                            LaunchedEffect(editingCell) {
-                                // Exit edit mode when Enter is pressed would be handled by the text
-                                // field
-                                // For now, we rely on clicking outside or tab navigation
-                            }
+                                onEditComplete = { editingCell = null },
+                                modifier = Modifier.fillMaxWidth().height(28.dp))
                         } else {
                             // Display mode
                             Text(
@@ -550,19 +629,6 @@ fun RetroEditableTable(
                                 textAlign = TextAlign.Start,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier =
-                                    Modifier.fillMaxWidth()
-                                        .then(
-                                            if (isIdColumn) {
-                                                Modifier.pointerInput(Unit) {
-                                                    detectTapGestures(
-                                                        onTap = { onCellClick(rowIndex, colIndex) },
-                                                    )
-                                                }
-                                            } else {
-                                                Modifier
-                                            },
-                                        ),
                             )
                         }
                     }
@@ -584,7 +650,7 @@ fun RetroEditableTable(
     }
 }
 
-// Keep the original RetroTable for compatibility
+// Legacy alias for backward compatibility
 @Composable
 fun RetroTable(
     headers: List<String>,
@@ -592,75 +658,10 @@ fun RetroTable(
     onCellClick: (rowIndex: Int, colIndex: Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
-    val minColumnWidth = 100.dp
-    val columnWidths = headers.map { minColumnWidth }
-
-    Column(
-        modifier = modifier.background(Color.White).border(1.dp, RetroColors.ButtonDarkShadow),
-    ) {
-        // Header row
-        Row(
-            modifier = Modifier.fillMaxWidth().background(RetroColors.ButtonFace),
-        ) {
-            headers.forEachIndexed { index, header ->
-                Box(
-                    modifier =
-                        Modifier.width(columnWidths[index])
-                            .border(1.dp, RetroColors.ButtonShadow)
-                            .padding(8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = header,
-                        style = RetroTypography.Default.copy(fontWeight = FontWeight.Bold),
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        }
-
-        // Data rows
-        rows.forEachIndexed { rowIndex, row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                row.forEachIndexed { colIndex, cell ->
-                    var cellPressed by remember { mutableStateOf(false) }
-
-                    Box(
-                        modifier =
-                            Modifier.width(columnWidths[colIndex])
-                                .border(1.dp, RetroColors.ButtonShadow)
-                                .background(
-                                    if (cellPressed) RetroColors.ButtonFace else Color.White,
-                                )
-                                .pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onPress = {
-                                            cellPressed = true
-                                            val released = tryAwaitRelease()
-                                            cellPressed = false
-                                            if (released) {
-                                                onCellClick(rowIndex, colIndex)
-                                            }
-                                        },
-                                    )
-                                }
-                                .padding(8.dp),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        Text(
-                            text = cell,
-                            style = RetroTypography.Default,
-                            textAlign = TextAlign.Start,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        }
-    }
+    RetroEditableTable(
+        headers = headers,
+        rows = rows,
+        onCellClick = onCellClick,
+        modifier = modifier,
+        isEditable = false)
 }

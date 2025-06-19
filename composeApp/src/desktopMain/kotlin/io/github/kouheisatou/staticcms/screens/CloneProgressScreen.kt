@@ -44,7 +44,7 @@ fun CloneProgressScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 RetroProgressBar(
-                    progress = progress,
+                    progress = progress.coerceIn(0f, 1f),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 )
 
@@ -57,12 +57,13 @@ fun CloneProgressScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Status messages based on progress - synchronized with FileOperations phases
+            // Status messages based on progress
             val statusMessage =
                 when {
+                    progress <= 0.05f -> "Initializing clone..."
                     progress <= 0.1f -> "Connecting to remote repository..."
-                    progress <= 0.6f -> "Receiving objects..."
-                    progress <= 0.9f -> "Resolving deltas..."
+                    progress <= 0.5f -> "Receiving objects..."
+                    progress <= 0.8f -> "Resolving deltas..."
                     progress < 1.0f -> "Checking out files..."
                     else -> "Clone completed!"
                 }

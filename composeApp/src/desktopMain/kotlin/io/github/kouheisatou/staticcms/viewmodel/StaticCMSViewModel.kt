@@ -8,32 +8,36 @@ import kotlinx.coroutines.flow.*
 import org.eclipse.jgit.api.Git
 
 class StaticCMSViewModel {
+    // Constants
+    private companion object {
+        const val SUCCESS_DELAY_MS = 1000L
+        const val DEFAULT_COMMIT_MESSAGE = "Update content via StaticCMS"
+    }
+
+    // Coroutine scope for the ViewModel
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    // Main app state
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
 
-    // GitHub API client
+    // Dependencies
     private val gitHubApiClient = GitHubApiClient()
+    private val gitOperations = GitOperations()
 
-    // GitHub認証関連のプロパティ
+    // Authentication properties
     private var githubToken: String = ""
     private var githubUsername: String = ""
     private var githubEmail: String = ""
 
-    private val _gitHubAuthState =
-        MutableStateFlow<io.github.kouheisatou.staticcms.model.AuthState>(
-            io.github.kouheisatou.staticcms.model.AuthState.Idle,
-        )
-    val gitHubAuthState: StateFlow<io.github.kouheisatou.staticcms.model.AuthState> =
-        _gitHubAuthState
+    // Authentication state
+    private val _gitHubAuthState = MutableStateFlow<AuthState>(AuthState.Idle)
+    val gitHubAuthState: StateFlow<AuthState> = _gitHubAuthState
 
-    private val _currentUser =
-        MutableStateFlow<io.github.kouheisatou.staticcms.model.GitHubUser?>(null)
-    val currentUser: StateFlow<io.github.kouheisatou.staticcms.model.GitHubUser?> = _currentUser
+    private val _currentUser = MutableStateFlow<GitHubUser?>(null)
+    val currentUser: StateFlow<GitHubUser?> = _currentUser
 
-    // Git operations
-    private val gitOperations = GitOperations()
+    // Git operation state
     val gitOperationState = gitOperations.operationState
     val gitOperationProgress = gitOperations.operationProgress
 
@@ -41,221 +45,228 @@ class StaticCMSViewModel {
     private var currentGitRepository: Git? = null
 
     init {
-        // GitHubApiClientの認証状態を監視
+        observeAuthenticationState()
+    }
+
+    // Authentication methods
+
+    fun authenticateWithBrowser() {
+        scope.launch { gitHubApiClient.authenticateWithBrowser() }
+    }
+
+    private fun observeAuthenticationState() {
         scope.launch {
             gitHubApiClient.authenticationState.collect { authState ->
                 _gitHubAuthState.value = authState
                 when (authState) {
-                    is io.github.kouheisatou.staticcms.model.AuthState.Success -> {
-                        _currentUser.value = authState.user
-                        githubToken = gitHubApiClient.getToken() ?: ""
-                        githubUsername = authState.user.login
-                        githubEmail =
-                            authState.user.email
-                                ?: "${authState.user.login}@users.noreply.github.com"
-
-                        // 認証成功後、自動的にリポジトリ選択画面に遷移
-                        println(
-                            "DEBUG: Authentication successful, proceeding to repository selection",
-                        )
-                        scope.launch {
-                            delay(1000) // 1秒待ってから遷移（成功メッセージを表示する時間を確保）
-                            proceedToRepositoryInput()
-                        }
-                    }
-                    is io.github.kouheisatou.staticcms.model.AuthState.Error -> {
-                        _currentUser.value = null
-                        githubToken = ""
-                        githubUsername = ""
-                        githubEmail = ""
-                    }
+                    is AuthState.Success -> handleAuthenticationSuccess(authState)
+                    is AuthState.Error -> handleAuthenticationError()
                     else -> {
-                        // その他の状態では現在のユーザー情報を保持
+                        // Keep current state for other states
                     }
                 }
             }
         }
     }
 
+    private suspend fun handleAuthenticationSuccess(authState: AuthState.Success) {
+        updateAuthenticationData(authState.user)
+        delay(SUCCESS_DELAY_MS) // Allow success message to be displayed
+        proceedToRepositoryInput()
+    }
+
+    private fun handleAuthenticationError() {
+        clearAuthenticationData()
+    }
+
+    private fun updateAuthenticationData(user: GitHubUser) {
+        _currentUser.value = user
+        githubToken = gitHubApiClient.getToken() ?: ""
+        githubUsername = user.login
+        githubEmail = user.email ?: "${user.login}@users.noreply.github.com"
+    }
+
+    private fun clearAuthenticationData() {
+        _currentUser.value = null
+        githubToken = ""
+        githubUsername = ""
+        githubEmail = ""
+    }
+
+    // Repository management methods
+
     fun updateRepositoryUrl(url: String) {
-        _state.value = _state.value.copy(repositoryUrl = url)
+        updateState { copy(repositoryUrl = url) }
     }
 
     fun proceedToRepositoryInput() {
-        _state.value = _state.value.copy(currentScreen = AppScreen.REPOSITORY_INPUT)
-        // リポジトリ一覧を自動的に読み込み
+        updateState { copy(currentScreen = AppScreen.REPOSITORY_INPUT) }
         loadRepositories()
     }
 
     fun loadRepositories() {
         scope.launch {
-            _state.value = _state.value.copy(isLoadingRepositories = true)
+            updateState { copy(isLoadingRepositories = true) }
             try {
-                val result = gitHubApiClient.getUserRepositories()
-                if (result.isSuccess) {
-                    val repositories = result.getOrThrow()
-                    _state.value =
-                        _state.value.copy(
-                            availableRepositories = repositories,
-                            isLoadingRepositories = false,
-                        )
-                    println("DEBUG: Loaded ${repositories.size} repositories")
-                } else {
-                    throw result.exceptionOrNull() ?: Exception("Failed to load repositories")
+                val repositories = gitHubApiClient.getUserRepositories().getOrThrow()
+                updateState {
+                    copy(availableRepositories = repositories, isLoadingRepositories = false)
                 }
             } catch (e: Exception) {
-                println("ERROR: Failed to load repositories: ${e.message}")
-                _state.value =
-                    _state.value.copy(
-                        availableRepositories = emptyList(),
-                        isLoadingRepositories = false,
-                    )
+                updateState {
+                    copy(availableRepositories = emptyList(), isLoadingRepositories = false)
+                }
             }
         }
     }
 
-    fun selectRepository(repository: io.github.kouheisatou.staticcms.model.GitHubRepository) {
-        _state.value =
-            _state.value.copy(
+    fun selectRepository(repository: GitHubRepository) {
+        updateState {
+            copy(
                 selectedRepository = repository,
                 repositoryUrl = repository.clone_url ?: repository.html_url ?: "",
-            )
-        println("DEBUG: Selected repository: ${repository.name}")
-        println("DEBUG: Repository URL: ${_state.value.repositoryUrl}")
-
-        // 即座にクローン進捗画面に遷移してUIフリーズを防ぐ
-        _state.value =
-            _state.value.copy(
                 currentScreen = AppScreen.CLONE_PROGRESS,
                 isCloning = true,
-                cloneProgress = 0f,
-            )
+                cloneProgress = 0f)
+        }
 
-        // 非同期でクローンを開始
-        scope.launch {
-            delay(100) // UIの更新を待つ
-            startCloneProcess()
+        startCloneProcess()
+    }
+
+    private fun startCloneProcess() {
+        scope.launch(Dispatchers.IO) {
+            delay(100) // Small delay to allow UI to update
+            performCloneOperation()
         }
     }
 
-    private suspend fun startCloneProcess() {
-        println("DEBUG: startCloneProcess() called")
+    private suspend fun performCloneOperation() {
         val currentState = _state.value
         val repositoryUrl = currentState.repositoryUrl
-        println("DEBUG: Repository URL: '$repositoryUrl'")
 
-        if (repositoryUrl.isBlank()) {
-            println("DEBUG: Repository URL is blank, returning")
-            _state.value =
-                _state.value.copy(
-                    currentScreen = AppScreen.REPOSITORY_INPUT,
-                    isCloning = false,
-                    cloneProgress = 0f,
-                )
-            return
-        }
-
-        // GitHub認証が必要かチェック
-        if (githubToken.isEmpty()) {
-            println("ERROR: GitHub authentication required but token is empty")
-            _state.value =
-                _state.value.copy(
-                    currentScreen = AppScreen.REPOSITORY_INPUT,
-                    isCloning = false,
-                    cloneProgress = 0f,
-                )
+        if (!validateClonePrerequisites(repositoryUrl)) {
             return
         }
 
         try {
-            println("DEBUG: Starting clone process...")
+            val (owner, repo) = parseRepositoryInfo(repositoryUrl)
+            val localPath = buildLocalPath(owner, repo)
 
-            // 実際のGitクローンを実行
-            val repoInfo = gitOperations.parseRepositoryUrl(repositoryUrl)
-            if (repoInfo == null) {
-                throw Exception("Invalid repository URL")
-            }
+            gitOperations.reset()
+            val progressJob = monitorCloneProgress()
 
-            val (owner, repo) = repoInfo
-            val localPath =
-                "${System.getProperty("user.home")}/.staticcms/repositories/${owner}_$repo"
-            println("DEBUG: Will clone to: $localPath")
-
-            // GitOperationsの進行状況を監視（バックグラウンドで）
-            val progressJob =
-                scope.launch {
-                    gitOperations.operationProgress.collect { progress ->
-                        _state.value = _state.value.copy(cloneProgress = progress)
-                        println(
-                            "DEBUG: ViewModel received clone progress: ${(progress * 100).toInt()}%",
-                        )
-                    }
-                }
-
-            // 進捗監視の状態を監視
-            val stateJob =
-                scope.launch {
-                    gitOperations.operationState.collect { operationState ->
-                        println("DEBUG: Git operation state: $operationState")
-                    }
-                }
-
-            println("DEBUG: Starting Git clone operation...")
-            val gitResult =
+            val cloneResult =
                 gitOperations.cloneRepository(
                     repositoryUrl = repositoryUrl,
                     destinationPath = localPath,
                     username = githubUsername,
-                    token = githubToken,
-                )
+                    token = githubToken)
 
-            progressJob.cancel() // 進行状況監視を停止
-            stateJob.cancel() // 状態監視を停止
+            progressJob.cancel()
 
-            if (gitResult.isSuccess) {
-                println("DEBUG: Clone successful, setting up content directories...")
-                currentGitRepository = gitResult.getOrThrow()
-                val rootDir = File(localPath)
-
-                // プログレスバーが完了したことを確認してから遷移
-                _state.value = _state.value.copy(cloneProgress = 1.0f)
-                delay(1000) // ユーザーに完了を見せる時間
-
-                val contentDirectories = FileOperations.scanContentDirectories(rootDir)
-                println("DEBUG: Found ${contentDirectories.size} content directories")
-
-                _state.value =
-                    _state.value.copy(
-                        currentScreen = AppScreen.MAIN_VIEW,
-                        isCloning = false,
-                        contentDirectories = contentDirectories,
-                        rootDirectory = rootDir,
-                        cloneProgress = 1.0f,
-                    )
-                println("DEBUG: Transition to MAIN_VIEW completed")
+            if (cloneResult.isSuccess) {
+                handleCloneSuccess(cloneResult.getOrThrow(), File(localPath))
             } else {
-                throw gitResult.exceptionOrNull() ?: Exception("Clone failed")
+                throw cloneResult.exceptionOrNull() ?: Exception("Clone failed")
             }
         } catch (e: Exception) {
-            println("ERROR: Clone failed: ${e.message}")
-            e.printStackTrace()
-            _state.value =
-                _state.value.copy(
-                    currentScreen = AppScreen.REPOSITORY_INPUT,
-                    isCloning = false,
-                    cloneProgress = 0f,
-                )
+            handleCloneError(e.message ?: "Unknown error occurred")
         }
     }
 
-    fun selectDirectory(index: Int) {
-        _state.value = _state.value.copy(selectedDirectoryIndex = index)
+    private fun validateClonePrerequisites(repositoryUrl: String): Boolean {
+        if (repositoryUrl.isBlank() || githubToken.isEmpty()) {
+            handleCloneError("Authentication or repository URL missing")
+            return false
+        }
+        return true
     }
 
-    fun openArticle(
-        rowIndex: Int,
-        colIndex: Int,
-    ) {
+    private fun parseRepositoryInfo(repositoryUrl: String): Pair<String, String> {
+        return gitOperations.parseRepositoryUrl(repositoryUrl)
+            ?: throw Exception("Invalid repository URL")
+    }
+
+    private fun buildLocalPath(owner: String, repo: String): String {
+        return "${System.getProperty("user.home")}/.staticcms/repositories/${owner}_$repo"
+    }
+
+    private fun monitorCloneProgress() =
+        scope.launch(Dispatchers.Main) {
+            gitOperations.operationProgress.collect { progress ->
+                updateState { copy(cloneProgress = progress) }
+            }
+        }
+
+    private suspend fun handleCloneSuccess(git: Git, rootDir: File) {
+        currentGitRepository = git
+
+        withContext(Dispatchers.Main) { updateState { copy(cloneProgress = 1.0f) } }
+
+        delay(SUCCESS_DELAY_MS)
+
+        val contentDirectories =
+            withContext(Dispatchers.IO) { FileOperations.scanContentDirectories(rootDir) }
+
+        withContext(Dispatchers.Main) {
+            updateState {
+                copy(
+                    currentScreen = AppScreen.MAIN_VIEW,
+                    isCloning = false,
+                    contentDirectories = contentDirectories,
+                    rootDirectory = rootDir,
+                    cloneProgress = 1.0f)
+            }
+        }
+    }
+
+    private fun handleCloneError(errorMessage: String) {
+        scope.launch(Dispatchers.Main) {
+            updateState {
+                copy(
+                    currentScreen = AppScreen.REPOSITORY_INPUT,
+                    isCloning = false,
+                    cloneProgress = 0f)
+            }
+        }
+    }
+
+    // Content management methods
+
+    fun selectDirectory(index: Int) {
+        updateState { copy(selectedDirectoryIndex = index) }
+    }
+
+    fun refreshContentDirectories() {
+        val rootDir = _state.value.rootDirectory ?: return
+
+        scope.launch(Dispatchers.IO) {
+            val contentDirectories = FileOperations.scanContentDirectories(rootDir)
+
+            withContext(Dispatchers.Main) {
+                updateState { copy(contentDirectories = contentDirectories) }
+            }
+        }
+    }
+
+    fun updateCellValue(directoryIndex: Int, rowIndex: Int, colIndex: Int, newValue: String) {
+        val currentState = _state.value
+        val directory = currentState.contentDirectories.getOrNull(directoryIndex) ?: return
+        val row = directory.data.getOrNull(rowIndex) ?: return
+
+        val updatedRow = updateRowValue(row, colIndex, newValue, directory.type)
+        val updatedDirectory = updateDirectoryData(directory, rowIndex, updatedRow)
+        val updatedDirectories =
+            updateDirectoriesList(currentState.contentDirectories, directoryIndex, updatedDirectory)
+
+        updateState { copy(contentDirectories = updatedDirectories) }
+
+        scope.launch(Dispatchers.IO) { saveDirectoryToFile(updatedDirectory) }
+    }
+
+    // Article management methods
+
+    fun openArticle(rowIndex: Int, colIndex: Int) {
         val currentState = _state.value
         val selectedDirectory =
             currentState.contentDirectories.getOrNull(currentState.selectedDirectoryIndex)
@@ -267,11 +278,11 @@ class StaticCMSViewModel {
                 val articleContent = FileOperations.readMarkdownFile(articleDir)
 
                 if (articleContent != null) {
-                    _state.value =
-                        _state.value.copy(
+                    updateState {
+                        copy(
                             currentScreen = AppScreen.ARTICLE_DETAIL,
-                            selectedArticle = articleContent,
-                        )
+                            selectedArticle = articleContent)
+                    }
                 }
             }
         }
@@ -280,10 +291,7 @@ class StaticCMSViewModel {
     fun updateArticleContent(content: String) {
         val currentArticle = _state.value.selectedArticle
         if (currentArticle != null) {
-            _state.value =
-                _state.value.copy(
-                    selectedArticle = currentArticle.copy(content = content),
-                )
+            updateState { copy(selectedArticle = currentArticle.copy(content = content)) }
         }
     }
 
@@ -291,182 +299,40 @@ class StaticCMSViewModel {
         val currentArticle = _state.value.selectedArticle
         if (currentArticle != null) {
             FileOperations.writeMarkdownFile(currentArticle, currentArticle.content)
-            println("Article saved: ${currentArticle.markdownFile.absolutePath}")
         }
     }
 
     fun backToMain() {
-        _state.value =
-            _state.value.copy(
-                currentScreen = AppScreen.MAIN_VIEW,
-                selectedArticle = null,
-            )
+        updateState { copy(currentScreen = AppScreen.MAIN_VIEW, selectedArticle = null) }
     }
 
-    // Additional utility functions
-    fun refreshContentDirectories() {
-        val rootDir = _state.value.rootDirectory
-        if (rootDir != null) {
-            val contentDirectories = FileOperations.scanContentDirectories(rootDir)
-            _state.value = _state.value.copy(contentDirectories = contentDirectories)
-        }
-    }
+    // Git operations
 
-    fun commitAndPush(commitMessage: String = "Update content via StaticCMS") {
+    fun commitAndPush(commitMessage: String = DEFAULT_COMMIT_MESSAGE) {
         val git = currentGitRepository
-        if (git == null) {
-            println("No Git repository available")
+        if (!validateGitOperationPrerequisites(git)) {
             return
         }
 
-        if (githubToken.isEmpty() || githubUsername.isEmpty()) {
-            println("GitHub authentication required")
-            return
-        }
-
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             try {
-                val result =
-                    gitOperations.commitAndPush(
-                        git = git,
-                        commitMessage = commitMessage,
-                        username = githubUsername,
-                        email = githubEmail,
-                        token = githubToken,
-                    )
-
-                if (result.isSuccess) {
-                    println("Changes committed and pushed successfully")
-                } else {
-                    println("Commit/Push failed: ${result.exceptionOrNull()?.message}")
-                }
+                gitOperations.commitAndPush(
+                    git = git!!,
+                    commitMessage = commitMessage,
+                    username = githubUsername,
+                    email = githubEmail,
+                    token = githubToken)
             } catch (e: Exception) {
-                println("Commit/Push error: ${e.message}")
+                println("DEBUG: Commit/Push error: ${e.message}")
             }
         }
     }
 
-    fun exportChanges() {
-        commitAndPush()
+    private fun validateGitOperationPrerequisites(git: Git?): Boolean {
+        return git != null && githubToken.isNotEmpty() && githubUsername.isNotEmpty()
     }
 
-    fun dispose() {
-        gitHubApiClient.close()
-        gitOperations.reset()
-        currentGitRepository?.close()
-        scope.cancel()
-    }
-
-    fun updateCellValue(
-        directoryIndex: Int,
-        rowIndex: Int,
-        colIndex: Int,
-        newValue: String,
-    ) {
-        val currentState = _state.value
-        val directory = currentState.contentDirectories.getOrNull(directoryIndex) ?: return
-        val row = directory.data.getOrNull(rowIndex) ?: return
-
-        // Create updated row
-        val updatedRow =
-            when (colIndex) {
-                0 -> return // ID column is not editable
-                1 -> row.copy(nameJa = newValue)
-                2 -> row.copy(nameEn = newValue)
-                3 ->
-                    when (directory.type) {
-                        DirectoryType.ARTICLE -> row.copy(thumbnail = newValue)
-                        DirectoryType.ENUM -> {
-                            // For enum types, column 3 might be an additional field
-                            val additionalFields = row.additionalFields.toMutableMap()
-                            val fieldKeys =
-                                directory.data.firstOrNull()?.additionalFields?.keys?.toList()
-                                    ?: emptyList()
-                            if (fieldKeys.isNotEmpty()) {
-                                additionalFields[fieldKeys[0]] = newValue
-                            }
-                            row.copy(additionalFields = additionalFields)
-                        }
-                    }
-                4 ->
-                    if (directory.type == DirectoryType.ARTICLE) {
-                        row.copy(descJa = newValue)
-                    } else {
-                        val additionalFields = row.additionalFields.toMutableMap()
-                        val fieldKeys =
-                            directory.data.firstOrNull()?.additionalFields?.keys?.toList()
-                                ?: emptyList()
-                        if (fieldKeys.size > 1) {
-                            additionalFields[fieldKeys[1]] = newValue
-                        }
-                        row.copy(additionalFields = additionalFields)
-                    }
-                5 ->
-                    if (directory.type == DirectoryType.ARTICLE) {
-                        row.copy(descEn = newValue)
-                    } else {
-                        val additionalFields = row.additionalFields.toMutableMap()
-                        val fieldKeys =
-                            directory.data.firstOrNull()?.additionalFields?.keys?.toList()
-                                ?: emptyList()
-                        if (fieldKeys.size > 2) {
-                            additionalFields[fieldKeys[2]] = newValue
-                        }
-                        row.copy(additionalFields = additionalFields)
-                    }
-                else -> {
-                    // Handle additional fields for article type
-                    val additionalFields = row.additionalFields.toMutableMap()
-                    val fieldKeys =
-                        directory.data.firstOrNull()?.additionalFields?.keys?.toList()
-                            ?: emptyList()
-                    val additionalFieldIndex =
-                        colIndex - (if (directory.type == DirectoryType.ARTICLE) 6 else 3)
-                    if (additionalFieldIndex >= 0 && additionalFieldIndex < fieldKeys.size) {
-                        additionalFields[fieldKeys[additionalFieldIndex]] = newValue
-                    }
-                    row.copy(additionalFields = additionalFields)
-                }
-            }
-
-        // Update the directory data
-        val updatedData = directory.data.toMutableList()
-        updatedData[rowIndex] = updatedRow
-        val updatedDirectory = directory.copy(data = updatedData)
-
-        // Update the state
-        val updatedDirectories = currentState.contentDirectories.toMutableList()
-        updatedDirectories[directoryIndex] = updatedDirectory
-
-        _state.value = _state.value.copy(contentDirectories = updatedDirectories)
-
-        // Save the changes to CSV file
-        saveDirectoryToFile(updatedDirectory)
-
-        println("DEBUG: Updated cell [$rowIndex,$colIndex] to '$newValue'")
-    }
-
-    private fun saveDirectoryToFile(directory: ContentDirectory) {
-        try {
-            FileOperations.writeCsvFile(directory)
-            println("DEBUG: Saved changes to ${directory.name}")
-        } catch (e: Exception) {
-            println("ERROR: Failed to save directory ${directory.name}: ${e.message}")
-        }
-    }
-
-    fun authenticateWithBrowser() {
-        scope.launch { gitHubApiClient.authenticateWithBrowser() }
-    }
-
-    fun startClone() {
-        scope.launch { startCloneProcess() }
-    }
-
-    fun checkRepositoryPermissions(
-        repositoryUrl: String,
-        callback: (Boolean, String?) -> Unit,
-    ) {
+    fun checkRepositoryPermissions(repositoryUrl: String, callback: (Boolean, String?) -> Unit) {
         val repoInfo = gitOperations.parseRepositoryUrl(repositoryUrl)
         if (repoInfo == null) {
             callback(false, "Invalid repository URL")
@@ -479,12 +345,101 @@ class StaticCMSViewModel {
             if (result.isSuccess) {
                 val hasPermission = result.getOrThrow()
                 callback(
-                    hasPermission,
-                    if (hasPermission) null else "No write permission to repository",
-                )
+                    hasPermission, if (hasPermission) null else "No write permission to repository")
             } else {
                 callback(false, "Failed to check permissions: ${result.exceptionOrNull()?.message}")
             }
         }
+    }
+
+    // Helper methods for data updates
+
+    private fun updateRowValue(
+        row: CsvRow,
+        colIndex: Int,
+        newValue: String,
+        directoryType: DirectoryType
+    ): CsvRow {
+        return when (colIndex) {
+            0 -> row // ID column is not editable
+            1 -> row.copy(nameJa = newValue)
+            2 -> row.copy(nameEn = newValue)
+            3 ->
+                when (directoryType) {
+                    DirectoryType.ARTICLE -> row.copy(thumbnail = newValue)
+                    DirectoryType.ENUM -> updateAdditionalField(row, 0, newValue)
+                }
+            4 ->
+                if (directoryType == DirectoryType.ARTICLE) {
+                    row.copy(descJa = newValue)
+                } else {
+                    updateAdditionalField(row, 1, newValue)
+                }
+            5 ->
+                if (directoryType == DirectoryType.ARTICLE) {
+                    row.copy(descEn = newValue)
+                } else {
+                    updateAdditionalField(row, 2, newValue)
+                }
+            else -> {
+                val additionalFieldIndex =
+                    colIndex - (if (directoryType == DirectoryType.ARTICLE) 6 else 3)
+                updateAdditionalField(row, additionalFieldIndex, newValue)
+            }
+        }
+    }
+
+    private fun updateAdditionalField(row: CsvRow, fieldIndex: Int, newValue: String): CsvRow {
+        val additionalFields = row.additionalFields.toMutableMap()
+        val fieldKeys = row.additionalFields.keys.toList()
+        if (fieldIndex >= 0 && fieldIndex < fieldKeys.size) {
+            additionalFields[fieldKeys[fieldIndex]] = newValue
+        }
+        return row.copy(additionalFields = additionalFields)
+    }
+
+    private fun updateDirectoryData(
+        directory: ContentDirectory,
+        rowIndex: Int,
+        updatedRow: CsvRow
+    ): ContentDirectory {
+        val updatedData = directory.data.toMutableList()
+        updatedData[rowIndex] = updatedRow
+        return directory.copy(data = updatedData)
+    }
+
+    private fun updateDirectoriesList(
+        directories: List<ContentDirectory>,
+        directoryIndex: Int,
+        updatedDirectory: ContentDirectory
+    ): List<ContentDirectory> {
+        val updatedDirectories = directories.toMutableList()
+        updatedDirectories[directoryIndex] = updatedDirectory
+        return updatedDirectories
+    }
+
+    private fun saveDirectoryToFile(directory: ContentDirectory) {
+        try {
+            FileOperations.writeCsvFile(directory)
+        } catch (e: Exception) {
+            // Handle error appropriately in production
+            println("ERROR: Failed to save CSV file: ${e.message}")
+        }
+    }
+
+    // State management helper
+
+    private inline fun updateState(update: AppState.() -> AppState) {
+        _state.value = _state.value.update()
+    }
+
+    // Cleanup
+
+    fun dispose() {
+        gitHubApiClient.close()
+        gitOperations.reset()
+        gitOperations.dispose()
+        currentGitRepository?.close()
+        scope.cancel()
     }
 }

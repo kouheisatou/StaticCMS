@@ -1,18 +1,33 @@
 package io.github.kouheisatou.staticcms.util
 
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.lib.ProgressMonitor
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 
 class GitOperations {
-    private val _operationState = MutableStateFlow<OperationState>(OperationState.Idle)
-    val operationState: StateFlow<OperationState> = _operationState
+    // Constants for better maintainability
+    private object ProgressConstants {
+        const val INIT = 0.05f
+        const val CONNECT = 0.1f
+        const val RECEIVE_END = 0.5f
+        const val RESOLVE_END = 0.8f
+        const val CHECKOUT_END = 0.95f
+        const val COMMIT_STAGE = 0.3f
+        const val COMMIT_COMPLETE = 0.6f
+        const val PUSH_START = 0.7f
+    }
 
-    private val _operationProgress = MutableStateFlow(0f)
-    val operationProgress: StateFlow<Float> = _operationProgress
-
+    // Sealed class for operation states
     sealed class OperationState {
         object Idle : OperationState()
 
@@ -27,129 +42,58 @@ class GitOperations {
         data class Error(val message: String) : OperationState()
     }
 
+    // Thread-safe state management
+    private val _operationState = MutableStateFlow<OperationState>(OperationState.Idle)
+    val operationState: StateFlow<OperationState> = _operationState.asStateFlow()
+
+    private val _operationProgress = MutableStateFlow(0f)
+    val operationProgress: StateFlow<Float> = _operationProgress.asStateFlow()
+
+    // Coroutine scopes for different contexts
+    private val backgroundScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val uiScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    init {
+        // Debug logging for progress monitoring
+        uiScope.launch {
+            operationProgress.collect { progress ->
+                println("DEBUG: GitOperations progress: $progress")
+            }
+        }
+    }
+
+    /** Clone a repository with progress tracking */
     suspend fun cloneRepository(
         repositoryUrl: String,
         destinationPath: String,
         username: String,
         token: String,
     ): Result<Git> {
-        return try {
-            _operationState.value = OperationState.Cloning(0f)
-            _operationProgress.value = 0f
+        return withContext(Dispatchers.IO) {
+            try {
+                updateStateAndProgress(OperationState.Cloning(0f), 0f)
 
-            println("DEBUG: Starting clone to $destinationPath")
+                val destinationDir = prepareDestinationDirectory(destinationPath)
+                val credentialsProvider = createCredentialsProvider(username, token)
 
-            val destinationDir = File(destinationPath)
-            if (destinationDir.exists()) {
-                println("DEBUG: Destination directory exists, deleting...")
-                destinationDir.deleteRecursively()
+                val git =
+                    Git.cloneRepository()
+                        .setURI(repositoryUrl)
+                        .setDirectory(destinationDir)
+                        .setCredentialsProvider(credentialsProvider)
+                        .setProgressMonitor(CloneProgressMonitor())
+                        .call()
+
+                updateStateAndProgress(OperationState.Success("Repository cloned successfully"), 1f)
+                Result.success(git)
+            } catch (e: Exception) {
+                updateStateAndProgress(OperationState.Error("Clone failed: ${e.message}"), 0f)
+                Result.failure(e)
             }
-            destinationDir.mkdirs()
-            println("DEBUG: Created destination directory")
-
-            val credentialsProvider = UsernamePasswordCredentialsProvider(username, token)
-
-            var totalWork = 0
-            var currentWork = 0
-
-            // プログレス監視付きクローン
-            val git =
-                Git.cloneRepository()
-                    .setURI(repositoryUrl)
-                    .setDirectory(destinationDir)
-                    .setCredentialsProvider(credentialsProvider)
-                    .setProgressMonitor(
-                        object : org.eclipse.jgit.lib.ProgressMonitor {
-                            private var taskTotalWork = 0
-                            private var taskCurrentWork = 0
-
-                            override fun start(totalTasks: Int) {
-                                println("DEBUG: Git clone started with $totalTasks tasks")
-                                _operationProgress.value = 0.1f
-                                _operationState.value = OperationState.Cloning(0.1f)
-                            }
-
-                            override fun beginTask(
-                                title: String?,
-                                totalWork: Int,
-                            ) {
-                                println("DEBUG: Git task started: $title (totalWork: $totalWork)")
-                                taskTotalWork = totalWork
-                                taskCurrentWork = 0
-                                if (totalWork > 0) {
-                                    val baseProgress =
-                                        when {
-                                            title?.contains("Receiving objects") == true -> 0.1f
-                                            title?.contains("Resolving deltas") == true -> 0.6f
-                                            title?.contains("Checking out files") == true -> 0.8f
-                                            else -> 0.1f
-                                        }
-                                    _operationProgress.value = baseProgress
-                                    _operationState.value = OperationState.Cloning(baseProgress)
-                                }
-                            }
-
-                            override fun update(completed: Int) {
-                                taskCurrentWork += completed
-                                if (taskTotalWork > 0) {
-                                    val taskProgress =
-                                        (taskCurrentWork.toFloat() / taskTotalWork.toFloat())
-                                            .coerceIn(0f, 1f)
-                                    val overallProgress =
-                                        when {
-                                            taskCurrentWork <= taskTotalWork * 0.5 ->
-                                                0.1f + (taskProgress * 0.5f) // 10-60%
-                                            taskCurrentWork <= taskTotalWork * 0.8 ->
-                                                0.6f + (taskProgress * 0.2f) // 60-80%
-                                            else -> 0.8f + (taskProgress * 0.15f) // 80-95%
-                                        }
-                                    _operationProgress.value = overallProgress.coerceIn(0f, 0.95f)
-                                    _operationState.value = OperationState.Cloning(overallProgress)
-                                    println(
-                                        "DEBUG: Git progress: $taskCurrentWork/$taskTotalWork = ${overallProgress * 100}%",
-                                    )
-                                } else {
-                                    // totalWork不明の場合は段階的に進捗を更新
-                                    val currentProgress = _operationProgress.value
-                                    val newProgress = (currentProgress + 0.01f).coerceIn(0f, 0.9f)
-                                    _operationProgress.value = newProgress
-                                    _operationState.value = OperationState.Cloning(newProgress)
-                                    println(
-                                        "DEBUG: Git progress (incremental): ${newProgress * 100}%",
-                                    )
-                                }
-                            }
-
-                            override fun endTask() {
-                                println("DEBUG: Git task ended")
-                                val currentProgress = _operationProgress.value
-                                val newProgress = (currentProgress + 0.1f).coerceIn(0f, 0.95f)
-                                _operationProgress.value = newProgress
-                                _operationState.value = OperationState.Cloning(newProgress)
-                            }
-
-                            override fun isCancelled(): Boolean = false
-
-                            override fun showDuration(enabled: Boolean) {
-                                // JGitのインターフェース要件
-                            }
-                        },
-                    )
-                    .call()
-
-            println("DEBUG: Git clone completed successfully")
-            _operationProgress.value = 1f
-            _operationState.value = OperationState.Success("Repository cloned successfully")
-
-            Result.success(git)
-        } catch (e: Exception) {
-            println("ERROR: Git clone failed: ${e.message}")
-            e.printStackTrace()
-            _operationState.value = OperationState.Error("Clone failed: ${e.message}")
-            Result.failure(e)
         }
     }
 
+    /** Commit and push changes with progress tracking */
     suspend fun commitAndPush(
         git: Git,
         commitMessage: String,
@@ -157,113 +101,238 @@ class GitOperations {
         email: String,
         token: String,
     ): Result<Unit> {
-        return try {
-            _operationState.value = OperationState.Committing(commitMessage)
-            _operationProgress.value = 0f
+        return withContext(Dispatchers.IO) {
+            try {
+                updateStateAndProgress(OperationState.Committing(commitMessage), 0f)
 
-            // 変更をステージング
-            git.add().addFilepattern(".").call()
-            _operationProgress.value = 0.3f
+                // Stage changes
+                git.add().addFilepattern(".").call()
+                updateProgress(ProgressConstants.COMMIT_STAGE)
 
-            // コミット作成
-            git.commit()
-                .setMessage(commitMessage)
-                .setAuthor(username, email)
-                .setCommitter(username, email)
-                .call()
+                // Create commit
+                git.commit()
+                    .setMessage(commitMessage)
+                    .setAuthor(username, email)
+                    .setCommitter(username, email)
+                    .call()
 
-            _operationProgress.value = 0.6f
-            _operationState.value = OperationState.Pushing(0.6f)
+                updateStateAndProgress(
+                    OperationState.Pushing(ProgressConstants.COMMIT_COMPLETE),
+                    ProgressConstants.COMMIT_COMPLETE)
 
-            // プッシュ
-            val credentialsProvider = UsernamePasswordCredentialsProvider(username, token)
+                // Push changes
+                val credentialsProvider = createCredentialsProvider(username, token)
+                git.push()
+                    .setCredentialsProvider(credentialsProvider)
+                    .setProgressMonitor(PushProgressMonitor())
+                    .call()
 
-            git.push()
-                .setCredentialsProvider(credentialsProvider)
-                .setProgressMonitor(
-                    object : org.eclipse.jgit.lib.ProgressMonitor {
-                        override fun start(totalTasks: Int) {
-                            _operationProgress.value = 0.7f
-                            _operationState.value = OperationState.Pushing(0.7f)
-                        }
-
-                        override fun beginTask(
-                            title: String?,
-                            totalWork: Int,
-                        ) {
-                            println("Push Operation: $title")
-                        }
-
-                        override fun update(completed: Int) {
-                            val progress = 0.7f + (completed.toFloat() / 100f * 0.3f)
-                            _operationProgress.value = progress
-                            _operationState.value = OperationState.Pushing(progress)
-                        }
-
-                        override fun endTask() {
-                            // プッシュ完了
-                        }
-
-                        override fun isCancelled(): Boolean = false
-
-                        override fun showDuration(enabled: Boolean) {
-                            // JGitのインターフェース要件
-                        }
-                    },
-                )
-                .call()
-
-            _operationProgress.value = 1f
-            _operationState.value =
-                OperationState.Success("Changes committed and pushed successfully")
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            _operationState.value = OperationState.Error("Commit/Push failed: ${e.message}")
-            Result.failure(e)
+                updateStateAndProgress(
+                    OperationState.Success("Changes committed and pushed successfully"), 1f)
+                Result.success(Unit)
+            } catch (e: Exception) {
+                updateStateAndProgress(OperationState.Error("Commit/Push failed: ${e.message}"), 0f)
+                Result.failure(e)
+            }
         }
     }
 
-    suspend fun addFile(
-        git: Git,
-        filePath: String,
-    ): Result<Unit> {
-        return try {
-            git.add().addFilepattern(filePath).call()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
+    /** Add a file to the Git repository */
+    suspend fun addFile(git: Git, filePath: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                git.add().addFilepattern(filePath).call()
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 
+    /** Get repository status */
     suspend fun getStatus(git: Git): Result<org.eclipse.jgit.api.Status> {
-        return try {
-            val status = git.status().call()
-            Result.success(status)
-        } catch (e: Exception) {
-            Result.failure(e)
+        return withContext(Dispatchers.IO) {
+            try {
+                val status = git.status().call()
+                Result.success(status)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 
+    /** Parse repository URL to extract owner and repo name */
     fun parseRepositoryUrl(url: String): Pair<String, String>? {
         return try {
-            // https://github.com/owner/repo.git or https://github.com/owner/repo
             val regex = Regex("https://github\\.com/([^/]+)/([^/.]+)(?:\\.git)?/?")
             val matchResult = regex.find(url)
-            if (matchResult != null) {
-                val owner = matchResult.groupValues[1]
-                val repo = matchResult.groupValues[2]
+            matchResult?.let {
+                val owner = it.groupValues[1]
+                val repo = it.groupValues[2]
                 Pair(owner, repo)
-            } else {
-                null
             }
         } catch (e: Exception) {
             null
         }
     }
 
+    /** Reset operation state */
     fun reset() {
-        _operationState.value = OperationState.Idle
-        _operationProgress.value = 0f
+        uiScope.launch {
+            _operationState.value = OperationState.Idle
+            _operationProgress.value = 0f
+        }
+    }
+
+    /** Dispose resources */
+    fun dispose() {
+        backgroundScope.cancel()
+        uiScope.cancel()
+    }
+
+    // Private helper methods
+
+    private fun prepareDestinationDirectory(destinationPath: String): File {
+        val destinationDir = File(destinationPath)
+        if (destinationDir.exists()) {
+            destinationDir.deleteRecursively()
+        }
+        destinationDir.mkdirs()
+        return destinationDir
+    }
+
+    private fun createCredentialsProvider(username: String, token: String) =
+        UsernamePasswordCredentialsProvider(username, token)
+
+    private fun updateStateAndProgress(state: OperationState, progress: Float) {
+        uiScope.launch {
+            _operationState.value = state
+            _operationProgress.value = progress
+        }
+    }
+
+    private fun updateProgress(progress: Float) {
+        uiScope.launch { _operationProgress.value = progress }
+    }
+
+    private fun updateState(state: OperationState) {
+        uiScope.launch { _operationState.value = state }
+    }
+
+    // Progress monitor implementations
+
+    private inner class CloneProgressMonitor : ProgressMonitor {
+        private var currentTaskProgress = 0f
+        private var currentPhase = ""
+        private var totalWork = 0
+        private var completedWork = 0
+
+        override fun start(totalTasks: Int) {
+            updateProgress(ProgressConstants.INIT)
+        }
+
+        override fun beginTask(title: String?, totalWork: Int) {
+            currentPhase = title ?: ""
+            this.totalWork = totalWork
+            this.completedWork = 0
+
+            currentTaskProgress = getPhaseStartProgress(currentPhase)
+            updateProgress(currentTaskProgress)
+
+            println("DEBUG: Git task started - '$title', totalWork: $totalWork")
+        }
+
+        override fun update(completed: Int) {
+            this.completedWork += completed
+
+            val taskProgress =
+                if (totalWork > 0) {
+                    (completedWork.toFloat() / totalWork.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+
+            val overallProgress = calculateOverallProgress(currentPhase, taskProgress)
+            updateProgress(overallProgress)
+
+            // Throttled logging
+            if (completed > 0 && completedWork % 50 == 0) {
+                println(
+                    "DEBUG: Git progress - Phase: '$currentPhase', completed: $completedWork/$totalWork (${(taskProgress * 100).toInt()}%), overall: ${(overallProgress * 100).toInt()}%")
+            }
+        }
+
+        override fun endTask() {
+            val endProgress = getPhaseEndProgress(currentPhase)
+            updateProgress(endProgress)
+            println(
+                "DEBUG: Git task completed - '$currentPhase', final progress: ${(endProgress * 100).toInt()}%")
+        }
+
+        override fun isCancelled(): Boolean = false
+
+        override fun showDuration(enabled: Boolean) {}
+
+        private fun getPhaseStartProgress(phase: String): Float =
+            when {
+                phase.contains("Receiving objects") -> ProgressConstants.CONNECT
+                phase.contains("Resolving deltas") -> ProgressConstants.RECEIVE_END
+                phase.contains("Checking out files") -> ProgressConstants.RESOLVE_END
+                else -> ProgressConstants.INIT
+            }
+
+        private fun getPhaseEndProgress(phase: String): Float =
+            when {
+                phase.contains("Receiving objects") -> ProgressConstants.RECEIVE_END
+                phase.contains("Resolving deltas") -> ProgressConstants.RESOLVE_END
+                phase.contains("Checking out files") -> ProgressConstants.CHECKOUT_END
+                else -> (currentTaskProgress + 0.1f).coerceIn(0f, ProgressConstants.CHECKOUT_END)
+            }
+
+        private fun calculateOverallProgress(phase: String, taskProgress: Float): Float {
+            return when {
+                phase.contains("Receiving objects") -> {
+                    ProgressConstants.CONNECT +
+                        (taskProgress * (ProgressConstants.RECEIVE_END - ProgressConstants.CONNECT))
+                }
+                phase.contains("Resolving deltas") -> {
+                    ProgressConstants.RECEIVE_END +
+                        (taskProgress *
+                            (ProgressConstants.RESOLVE_END - ProgressConstants.RECEIVE_END))
+                }
+                phase.contains("Checking out files") -> {
+                    ProgressConstants.RESOLVE_END +
+                        (taskProgress *
+                            (ProgressConstants.CHECKOUT_END - ProgressConstants.RESOLVE_END))
+                }
+                else -> {
+                    currentTaskProgress + (taskProgress * 0.05f)
+                }
+            }.coerceIn(0f, ProgressConstants.CHECKOUT_END)
+        }
+    }
+
+    private inner class PushProgressMonitor : ProgressMonitor {
+        override fun start(totalTasks: Int) {
+            updateStateAndProgress(
+                OperationState.Pushing(ProgressConstants.PUSH_START), ProgressConstants.PUSH_START)
+        }
+
+        override fun beginTask(title: String?, totalWork: Int) {
+            // Push operation started
+        }
+
+        override fun update(completed: Int) {
+            val progress = ProgressConstants.PUSH_START + (completed.toFloat() / 100f * 0.3f)
+            updateStateAndProgress(OperationState.Pushing(progress), progress)
+        }
+
+        override fun endTask() {
+            // Push completed
+        }
+
+        override fun isCancelled(): Boolean = false
+
+        override fun showDuration(enabled: Boolean) {}
     }
 }

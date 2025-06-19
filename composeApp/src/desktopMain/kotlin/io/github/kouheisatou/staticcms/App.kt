@@ -13,13 +13,17 @@ import io.github.kouheisatou.staticcms.screens.RepositorySelectionScreen
 import io.github.kouheisatou.staticcms.ui.theme.RetroTheme
 import io.github.kouheisatou.staticcms.viewmodel.StaticCMSViewModel
 
+/** Main application composable function Manages the overall navigation and screen flow */
 @Composable
 fun app() {
     val viewModel = remember { StaticCMSViewModel() }
+
+    // Collect state flows
     val state by viewModel.state.collectAsState()
     val githubAuthState by viewModel.gitHubAuthState.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     val gitOperationState by viewModel.gitOperationState.collectAsState()
+    val gitOperationProgress by viewModel.gitOperationProgress.collectAsState()
 
     RetroTheme {
         when (state.currentScreen) {
@@ -28,7 +32,7 @@ fun app() {
                     githubToken = "",
                     onGitHubTokenChange = {},
                     onAuthenticateClick = {},
-                    onBrowserAuthClick = { viewModel.authenticateWithBrowser() },
+                    onBrowserAuthClick = viewModel::authenticateWithBrowser,
                     authState = githubAuthState,
                     currentUser = currentUser,
                     onContinue = {},
@@ -43,9 +47,17 @@ fun app() {
                 )
             }
             AppScreen.CLONE_PROGRESS -> {
+                // Use Git operations progress with fallback to state progress
+                val actualProgress =
+                    if (gitOperationProgress > 0f) {
+                        gitOperationProgress
+                    } else {
+                        state.cloneProgress
+                    }
+
                 CloneProgressScreen(
                     repositoryUrl = state.selectedRepository?.full_name ?: state.repositoryUrl,
-                    progress = state.cloneProgress,
+                    progress = actualProgress,
                 )
             }
             AppScreen.MAIN_VIEW -> {
@@ -64,7 +76,7 @@ fun app() {
                 state.selectedArticle?.let { article ->
                     ArticleDetailScreen(
                         article = article,
-                        onContentChange = { content -> viewModel.updateArticleContent(content) },
+                        onContentChange = viewModel::updateArticleContent,
                         onSave = viewModel::saveArticle,
                         onBack = viewModel::backToMain,
                     )
